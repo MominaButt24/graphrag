@@ -1,0 +1,3 @@
+from src.community import build_all_community_summaries
+
+build_all_community_summaries()
