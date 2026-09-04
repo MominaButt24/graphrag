@@ -7,6 +7,7 @@ echo "=================================================="
 echo " GraphRAG Pipeline is starting via PM2..."
 echo " FastAPI docs:  http://localhost:8000/docs"
 echo " Gradio UI:     http://localhost:7860"
+echo " Chainlit UI:   http://localhost:8001"
 echo "=================================================="
 echo ""
 
