@@ -19,6 +19,31 @@ llm = init_chat_model(
     max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
 )
 
+from threading import Lock
+
+# Plain global + lock instead of ContextVar — ContextVar doesn't reliably
+# propagate across threads, and LangGraph's agent tool execution can run
+# the tool call in a different thread/task context than whatever later
+# calls get_retrieval_metadata(). That mismatch meant .set() inside
+# hybrid_answer() succeeded, but the outer caller read a different,
+# never-updated context copy — a real answer came back, but the metadata
+# silently never did. A plain global is shared process-wide regardless
+# of which thread or async context touches it, so this closes that gap.
+_retrieval_metadata = None
+_retrieval_metadata_lock = Lock()
+
+
+def get_retrieval_metadata():
+    with _retrieval_metadata_lock:
+        return _retrieval_metadata
+
+
+def _set_retrieval_metadata(value):
+    global _retrieval_metadata
+    with _retrieval_metadata_lock:
+        _retrieval_metadata = value
+
+
 def classify_query(question: str) -> str:
     span = sentry_sdk.get_current_span()
     # deterministic pre-check for corpus-meta questions
@@ -106,7 +131,6 @@ def local_search(entity_name: str | list[str], question: str):
 
     with driver.session() as session:
         if len(entities) >= 2:
-            # 1. Try to find a connecting path between the first two (best case: shows the actual relationship)
             result = session.run("""
                 MATCH path = (a)-[r*1..3]-(b)
                 WHERE toLower(a.id) CONTAINS toLower($e1)
@@ -121,11 +145,6 @@ def local_search(entity_name: str | list[str], question: str):
             if not path_facts:
                 logger.debug(f"[local_search] no path found between '{entities[0]}' and '{entities[1]}' — falling back to independent search")
 
-            # 2. ALWAYS also search every entity independently — not just as a
-            # fallback when the path search finds nothing. Previously, a 3rd+
-            # entity (or any entity the path didn't cover) was silently
-            # dropped whenever the first two entities found a path, since the
-            # fallback below only fired on a totally empty result.
             for ent in entities:
                 facts.extend(search_single_entity(session, ent))
         else:
@@ -152,13 +171,11 @@ def global_search(question: str):
         result = session.run("MATCH (c:Community) RETURN c.community_id AS cid, c.summary AS summary")
         summaries = [(row["cid"], row["summary"]) for row in result]
 
-    # map step: check relevance of each summary
     partial_answers = []
     for cid, summary in summaries:
         response = llm.invoke(f"Summary: {summary}\n\nDoes this help answer '{question}'? If yes, explain how in 1-2 sentences.")
         partial_answers.append(response.content)
 
-    # reduce step: combine into one final answer
     combined_prompt = f"Combine these partial answers into one clear answer to '{question}':\n\n" + "\n".join(partial_answers)
     final = llm.invoke(combined_prompt)
     return final.content
@@ -179,8 +196,6 @@ def smart_query(question: str) -> str:
 
 from src.reranker import rerank_and_merge
 
-# --- Phase 1: hybrid retrieval additions below ---
-# smart_query/local_search/global_search above are untouched.
 
 def vector_search(question: str, top_k: int = 5) -> list[dict]:
     """Milvus similarity search — the vector-side counterpart to smart_query."""
@@ -214,29 +229,11 @@ def vector_search(question: str, top_k: int = 5) -> list[dict]:
 
 
 def kb_relevance_score(question: str) -> float:
-    """
-    Cheap relevance check — one fast vector similarity lookup, no graph
-    search, no reranking, no LLM call. Used to decide whether a question
-    is even worth running the full (slow) hybrid pipeline on, without
-    hardcoding what topics happen to be in the corpus today. Scales
-    automatically to whatever gets uploaded, since it's just asking
-    "does anything in Milvus actually look like this question."
-    """
     hits = vector_search(question, top_k=1)
     return hits[0]["score"] if hits else 0.0
 
 
 def hybrid_search(question: str, vector_top_k: int = 5) -> dict:
-    """
-    Runs smart_query (graph) and vector_search (Milvus) in parallel for the
-    same question.
-
-    Phase 1 only: results are returned unmerged, tagged by origin. Note the
-    shape mismatch — graph_result is smart_query's already-synthesized
-    answer string, vector_results is a list of scored raw chunks. Reconciling
-    that (raw graph facts + a match-confidence signal, comparable to the
-    vector scores) is Phase 2's reranker work, not done here.
-    """
     span = sentry_sdk.get_current_span()
     output = {
         "graph_result": None,
@@ -269,22 +266,55 @@ def hybrid_search(question: str, vector_top_k: int = 5) -> dict:
     return output
 
 
-def hybrid_answer(question: str, vector_top_k: int = 5, rerank_top_k: int = 5) -> str:
-    """
-    Full Phase 1 + Phase 2 pipeline: hybrid_search -> rerank_and_merge
-    (from src.reranker) -> one final LLM synthesis over the top-ranked,
-    mixed-source context.
-    """
-    hybrid_result = hybrid_search(question, vector_top_k=vector_top_k)
-    ranked = rerank_and_merge(question, hybrid_result, top_k=rerank_top_k)
+def hybrid_answer(question: str, vector_top_k=5, rerank_top_k=5):
+    hybrid_result = hybrid_search(
+        question,
+        vector_top_k=vector_top_k
+    )
+
+    ranked = rerank_and_merge(
+        question,
+        hybrid_result,
+        top_k=rerank_top_k
+    )
 
     if not ranked:
-        return "No relevant information found in either the graph or vector store."
+        _set_retrieval_metadata({
+            "vector_results": hybrid_result.get("vector_results", []),
+            "graph_result": hybrid_result.get("graph_result"),
+            "ranked_results": [],
+            "stats": {
+                "vector_candidates": len(hybrid_result.get("vector_results", [])),
+                "graph_available": bool(hybrid_result.get("graph_result")),
+                "reranked_candidates": 0,
+                "final_results": 0,
+            },
+        })
 
-    context = "\n\n".join(f"[{c['origin']}] {c['text']}" for c in ranked)
+        return "I couldn't find relevant information in the knowledge base."
+
+    _set_retrieval_metadata({
+        "vector_results": hybrid_result.get("vector_results", []),
+        "graph_result": hybrid_result.get("graph_result"),
+        "ranked_results": ranked,
+        "stats": {
+            "vector_candidates": len(hybrid_result.get("vector_results", [])),
+            "graph_available": bool(hybrid_result.get("graph_result")),
+            "reranked_candidates": len(hybrid_result.get("vector_results", [])) + (1 if hybrid_result.get("graph_result") else 0),
+            "final_results": len(ranked),
+        },
+    })
+
+    context = "\n\n".join(
+        f"[{c['origin']}] {c['text']}"
+        for c in ranked
+    )
+
     prompt = f"""Based on this combined context from a knowledge graph and a vector search:
 {context}
 
 Answer this question: {question}"""
+
     response = llm.invoke(prompt)
+
     return response.content

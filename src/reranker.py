@@ -2,44 +2,99 @@ from sentence_transformers import CrossEncoder
 
 _reranker = None
 
-# def get_reranker():
-#     global _reranker
-#     if _reranker is None:
-#         _reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
-#     return _reranker
 
-
-def rerank_and_merge(question: str, hybrid_result: dict, top_k: int = 5) -> list[dict]:
+def get_reranker():
     """
-    Scores every candidate (the graph's synthesized answer + each vector
-    chunk) against the question with a cross-encoder, and returns the
-    top_k ranked highest to lowest.
-
-    Known shortcut, flagged for later refinement: graph_result is
-    smart_query's already-answered text, not raw facts, so it's scored
-    as one candidate rather than broken into individual facts like the
-    vector chunks are.
+    Load the CrossEncoder only once and reuse it
+    for all subsequent reranking requests.
     """
-    reranker = CrossEncoder("cross-encoder/ms-marco-MiniLM-L-6-v2")
+    global _reranker
+
+    if _reranker is None:
+        print("[reranker] Loading CrossEncoder model...")
+
+        _reranker = CrossEncoder(
+            "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        )
+
+        print("[reranker] CrossEncoder model loaded.")
+
+    return _reranker
+
+
+def rerank_and_merge(
+    question: str,
+    hybrid_result: dict,
+    top_k: int = 5
+) -> list[dict]:
+    """
+    Reranks graph and vector candidates using a CrossEncoder.
+
+    Each candidate gets:
+    - original_rank
+    - rerank_score
+    - final_rank
+
+    The original vector similarity score is preserved.
+    """
+
+    # Reuse the already-loaded model
+    reranker = get_reranker()
+
     candidates = []
 
+    # Add graph result as one candidate
     if hybrid_result.get("graph_result"):
         candidates.append({
             "text": hybrid_result["graph_result"],
             "source": "neo4j_graph",
             "origin": "graph",
         })
-    candidates.extend(hybrid_result.get("vector_results", []))
+
+    # Add vector search results
+    candidates.extend(
+        hybrid_result.get("vector_results", [])
+    )
 
     if not candidates:
         return []
 
-    pairs = [(question, c["text"]) for c in candidates]
+    # Remember the original retrieval order
+    for original_rank, candidate in enumerate(
+        candidates,
+        start=1
+    ):
+        candidate["original_rank"] = original_rank
+
+    # Prepare question-document pairs for CrossEncoder
+    pairs = [
+        (question, candidate["text"])
+        for candidate in candidates
+    ]
+
+    # Calculate reranking scores
     scores = reranker.predict(pairs)
 
-    for c, s in zip(candidates, scores):
-        c["rerank_score"] = float(s)
+    for candidate, score in zip(candidates, scores):
+        candidate["rerank_score"] = float(score)
 
-    ranked = sorted(candidates, key=lambda c: c["rerank_score"], reverse=True)
-    print(f"[rerank] {len(candidates)} candidates -> top {min(top_k, len(ranked))}")
+    # Sort highest reranking score first
+    ranked = sorted(
+        candidates,
+        key=lambda candidate: candidate["rerank_score"],
+        reverse=True
+    )
+
+    # Assign final ranking after reranking
+    for final_rank, candidate in enumerate(
+        ranked,
+        start=1
+    ):
+        candidate["final_rank"] = final_rank
+
+    print(
+        f"[rerank] {len(candidates)} candidates "
+        f"-> top {min(top_k, len(ranked))}"
+    )
+
     return ranked[:top_k]

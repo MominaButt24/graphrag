@@ -16,15 +16,17 @@ from langchain.chat_models import init_chat_model
 
 from langfuse.langchain import CallbackHandler
 
-from src.retrieval import hybrid_answer, kb_relevance_score
+from src.retrieval import (
+    hybrid_answer,
+    kb_relevance_score,
+    get_retrieval_metadata,
+)
 from src.logger_config import get_logger
 
 load_dotenv()
 
 logger = get_logger(__name__)
 
-# Reads LANGFUSE_SECRET_KEY / LANGFUSE_PUBLIC_KEY / LANGFUSE_BASE_URL from
-# .env automatically — nothing to pass in here.
 langfuse_handler = CallbackHandler()
 
 llm = init_chat_model(
@@ -35,10 +37,6 @@ llm = init_chat_model(
     max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
 )
 
-# Tune this against your own corpus — run a few genuinely-relevant and
-# genuinely-irrelevant test questions through kb_relevance_score() and
-# see where the scores actually split. 0.25 is a starting point, not a
-# measured value.
 RELEVANCE_THRESHOLD = 0.25
 
 
@@ -55,7 +53,9 @@ def hybrid_knowledge_base(question: str) -> str:
     logger.info(f"[hybrid_knowledge_base] relevance score: {score:.3f}")
     if score < RELEVANCE_THRESHOLD:
         return "No relevant information found in the knowledge base for this question."
-    return hybrid_answer(question)
+    result = hybrid_answer(question)
+    logger.info(f"[hybrid_knowledge_base] hybrid_answer() returned, checking metadata immediately: {get_retrieval_metadata() is not None}")
+    return result
 
 
 tavily_search = TavilySearch(max_results=5)
@@ -113,9 +113,6 @@ agent = create_agent(
 
 
 def _extract_text(content) -> str:
-    """Some models return AIMessage.content as a list of content blocks
-    instead of a plain string on certain turns. Chainlit's cl.Message needs
-    a plain string, so normalize here rather than passing whatever comes back."""
     if isinstance(content, str):
         return content
     if isinstance(content, list):
@@ -129,14 +126,7 @@ def _extract_text(content) -> str:
     return str(content)
 
 
-def run_agent(question: str, history: list[dict] | None = None) -> str:
-    """
-    history: list of {"role": "user"|"assistant", "content": str} dicts,
-    oldest first, from chat_history_client.get_relevant_history(). Passed
-    in as prior messages so the agent has real conversational memory —
-    optional so existing single-question callers (e.g. Gradio) still work
-    unchanged.
-    """
+def run_agent(question: str, history: list[dict] | None = None) -> dict:
     messages = list(history or [])
     messages.append({"role": "user", "content": question})
 
@@ -147,7 +137,14 @@ def run_agent(question: str, history: list[dict] | None = None) -> str:
     final_message = result["messages"][-1]
     answer = _extract_text(final_message.content)
     logger.info(f"[run_agent] content type was {type(final_message.content).__name__}, extracted {len(answer)} chars")
-    return answer
+
+    retrieval = get_retrieval_metadata()
+    logger.info(f"[run_agent] get_retrieval_metadata() after agent.invoke() returned: {retrieval is not None}")
+
+    return {
+        "answer": answer,
+        "retrieval": retrieval,
+    }
 
 
 if __name__ == "__main__":
@@ -155,8 +152,8 @@ if __name__ == "__main__":
     setup_logging()
 
     test_questions = [
-        "How does workplace courtesy affect team performance?",  # should hit KB only
-        "What are the official rules of carrom?",  # known out-of-scope case — should fall back to Tavily
+        "How does workplace courtesy affect team performance?",
+        "What are the official rules of carrom?",
     ]
     for q in test_questions:
         print(f"\n{'='*60}\nQ: {q}\n{'='*60}")

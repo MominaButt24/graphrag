@@ -29,6 +29,7 @@ load_dotenv()
 
 THREADS_COLLECTION = "chat_threads"
 USERS_COLLECTION = "chat_users"
+DOCUMENTS_COLLECTION = "chat_documents"
 
 # Dummy vector dimension.
 # These collections are being used mainly for metadata storage.
@@ -37,6 +38,87 @@ DIM_PLACEHOLDER = 8
 
 _threads_collection = None
 _users_collection = None
+_documents_collection = None
+
+# In-memory store for CustomElement props — see the ELEMENTS section on
+# MilvusDataLayer below for why this exists (create_element/get_element
+# were previously no-op stubs, which is almost certainly why props never
+# reached the frontend).
+_elements_store: dict = {}
+
+
+# ============================================================
+# DOCUMENTS COLLECTION — for the sidebar panel
+# ============================================================
+
+def get_documents_collection():
+    global _documents_collection
+
+    if _documents_collection is None:
+        connections.connect(alias="default", uri=os.getenv("MILVUS_URI"), token=os.getenv("MILVUS_TOKEN"))
+
+        if utility.has_collection(DOCUMENTS_COLLECTION):
+            _documents_collection = Collection(DOCUMENTS_COLLECTION)
+        else:
+            fields = [
+                FieldSchema(name="id", dtype=DataType.VARCHAR, max_length=64, is_primary=True),
+                FieldSchema(name="filename", dtype=DataType.VARCHAR, max_length=512),
+                FieldSchema(name="status", dtype=DataType.VARCHAR, max_length=32),  # "processing" | "done" | "failed"
+                FieldSchema(name="chunk_count", dtype=DataType.INT64),
+                FieldSchema(name="uploaded_by", dtype=DataType.VARCHAR, max_length=64),
+                FieldSchema(name="uploaded_at", dtype=DataType.INT64),
+                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=DIM_PLACEHOLDER),
+            ]
+            schema = CollectionSchema(fields, description="Tracks each uploaded document's ingestion status, for the docs sidebar")
+            _documents_collection = Collection(DOCUMENTS_COLLECTION, schema)
+            _documents_collection.create_index(
+                field_name="embedding",
+                index_params={"index_type": "FLAT", "metric_type": "L2", "params": {}},
+            )
+        _documents_collection.load()
+    return _documents_collection
+
+
+def start_document(doc_id: str, filename: str, uploaded_by: str) -> int:
+    """Call the moment a file arrives, before ingestion runs — shows 'processing' immediately."""
+    collection = get_documents_collection()
+    now = int(time.time())
+    collection.upsert([{
+        "id": doc_id,
+        "filename": filename,
+        "status": "processing",
+        "chunk_count": 0,
+        "uploaded_by": uploaded_by,
+        "uploaded_at": now,
+        "embedding": [0.0] * DIM_PLACEHOLDER,
+    }])
+    collection.flush()
+    return now
+
+
+def finish_document(doc_id: str, filename: str, uploaded_by: str, uploaded_at: int, chunk_count: int, status: str = "done"):
+    """Call once ingestion completes — same id, so this upserts in place rather than duplicating."""
+    collection = get_documents_collection()
+    collection.upsert([{
+        "id": doc_id,
+        "filename": filename,
+        "status": status,
+        "chunk_count": chunk_count,
+        "uploaded_by": uploaded_by,
+        "uploaded_at": uploaded_at,
+        "embedding": [0.0] * DIM_PLACEHOLDER,
+    }])
+    collection.flush()
+
+
+def list_documents():
+    collection = get_documents_collection()
+    rows = collection.query(
+        expr="uploaded_at >= 0",
+        output_fields=["id", "filename", "status", "chunk_count", "uploaded_by", "uploaded_at"],
+        limit=1000,
+    )
+    return sorted(rows, key=lambda r: r["uploaded_at"], reverse=True)
 
 
 # ============================================================
@@ -817,26 +899,60 @@ class MilvusDataLayer(cl_data.BaseDataLayer):
     # ========================================================
     # ELEMENTS
     # ========================================================
+    # Chainlit round-trips CustomElement props through create_element()/
+    # get_element() — even for elements attached inline in the current
+    # message, not just ones surviving a page reload. These were
+    # previously no-op stubs, which silently dropped every element's
+    # props: create_element() never stored them, so get_element() had
+    # nothing to return. That's the most likely reason props never
+    # reached the frontend despite the backend computing them correctly.
+    # A plain in-memory dict is enough here — elements are ephemeral UI
+    # artifacts for the running session, not something that needs to
+    # survive an app restart the way threads/messages do.
+
+    def _serialize_element(self, element) -> dict:
+        if hasattr(element, "to_dict"):
+            try:
+                return element.to_dict()
+            except Exception:
+                pass
+        # Fallback if to_dict() isn't available in this Chainlit version —
+        # pull the known attributes manually instead of guessing further.
+        return {
+            "id": getattr(element, "id", None),
+            "threadId": getattr(element, "thread_id", None) or getattr(element, "threadId", None),
+            "type": getattr(element, "type", None),
+            "name": getattr(element, "name", None),
+            "display": getattr(element, "display", None),
+            "props": getattr(element, "props", None),
+            "forId": getattr(element, "for_id", None) or getattr(element, "forId", None),
+            "mime": getattr(element, "mime", None),
+            "url": getattr(element, "url", None),
+        }
 
     async def create_element(
         self,
         element,
     ):
-        pass
+        element_dict = self._serialize_element(element)
+        element_id = element_dict.get("id")
+        if element_id:
+            _elements_store[element_id] = element_dict
+        return element_dict
 
     async def get_element(
         self,
         thread_id: str,
         element_id: str,
     ):
-        return None
+        return _elements_store.get(element_id)
 
     async def delete_element(
         self,
         element_id: str,
         thread_id: str = None,
     ):
-        pass
+        _elements_store.pop(element_id, None)
 
     # ========================================================
     # FEEDBACK

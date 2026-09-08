@@ -35,8 +35,13 @@ def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 
     for i, chunk in enumerate(chunks):
         try:
             graph_documents = transformer.convert_to_graph_documents([chunk])
+            node_count = sum(len(gd.nodes) for gd in graph_documents)
+            rel_count = sum(len(gd.relationships) for gd in graph_documents)
             graph.add_graph_documents(graph_documents)
-            print(f"[{i+1}/{len(chunks)}] extracted + written OK")
+            if node_count == 0:
+                print(f"[{i+1}/{len(chunks)}] ran OK but extracted 0 nodes, 0 relationships — nothing written for this chunk")
+            else:
+                print(f"[{i+1}/{len(chunks)}] extracted {node_count} nodes, {rel_count} relationships — written OK")
         except Exception as e:
             print(f"[{i+1}/{len(chunks)}] FAILED: {e}")
             failed_chunks.append((i, chunk, str(e)))

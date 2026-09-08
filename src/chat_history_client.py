@@ -123,9 +123,20 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
     history = [h for h in history if h["content"] != query]
     history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
 
-    answer = run_agent(query, history=history_messages)
+    agent_result = run_agent(query, history=history_messages)
+
+    answer = agent_result["answer"]
+    retrieval = agent_result.get("retrieval")
+
+    from src.logger_config import get_logger
+    logger = get_logger(__name__)
+    logger.info(f"[chat_history_client][answer_query] FINAL retrieval being returned to Chainlit: {retrieval is not None}")
+
     store_turn(thread_id, user_id, "assistant", answer)
-    return answer
+    return {
+        "answer": answer,
+        "retrieval": retrieval,
+    }
 
 
 # ---------- Mock LLM — kept only as an offline fallback for future testing ----------
