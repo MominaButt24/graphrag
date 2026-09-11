@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # second copy of all-MiniLM-L6-v2 into memory.
 # Adjust this import path if your module lives elsewhere (e.g. src.milvus_client).
 from src.milvus_client import get_embedder
-
+from src.planner import create_plan
 load_dotenv()
 
 COLLECTION_NAME = "chat_history"
@@ -122,8 +122,33 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
     # duplicated as both "history" and "question" when we call run_agent
     history = [h for h in history if h["content"] != query]
     history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
+#plan
+    print("\n[PLANNER] Creating plan...")
 
-    agent_result = run_agent(query, history=history_messages)
+    plan = create_plan(
+        query,
+        history=history_messages,
+    )
+
+    print("[PLANNER] Plan created successfully:")
+    for task in plan["tasks"]:
+        print(f"  {task['id']}. {task['description']}")
+
+
+#planstate set
+
+# plan_state = PlanState(plan)
+
+#execute
+    print("\n[AGENT] Starting agent...")
+
+    agent_result = run_agent(
+        query,
+        history=history_messages,
+    )
+
+    print("[AGENT] Agent completed.")
+   
 
     answer = agent_result["answer"]
     retrieval = agent_result.get("retrieval")
@@ -136,6 +161,7 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
     return {
         "answer": answer,
         "retrieval": retrieval,
+        "plan": plan,
     }
 
 
