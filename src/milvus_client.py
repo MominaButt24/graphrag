@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-COLLECTION_NAME = "graphrag_docs"
+COLLECTION_NAME = "graphrag_documents"
 EMBED_DIM = 384  
 
 _collection = None  # module-level singleton, mirrors _driver in neo4j_client.py
@@ -30,11 +30,60 @@ def get_collection():
         if utility.has_collection(COLLECTION_NAME):
             _collection = Collection(COLLECTION_NAME)
         else:
+            # fields = [
+            #     FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+            #     FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=8192),
+            #     FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=512),
+            #     FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=EMBED_DIM),
+            # ]
             fields = [
-                FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-                FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=8192),
-                FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=512),
-                FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=EMBED_DIM),
+                FieldSchema(
+                    name="id",
+                    dtype=DataType.INT64,
+                    is_primary=True,
+                    auto_id=True,
+                ),
+
+                FieldSchema(
+                    name="document_id",
+                    dtype=DataType.VARCHAR,
+                    max_length=64,
+                ),
+
+                FieldSchema(
+                    name="chunk_id",
+                    dtype=DataType.VARCHAR,
+                    max_length=128,
+                ),
+
+                FieldSchema(
+                    name="filename",
+                    dtype=DataType.VARCHAR,
+                    max_length=512,
+                ),
+
+                FieldSchema(
+                    name="source_key",
+                    dtype=DataType.VARCHAR,
+                    max_length=1024,
+                ),
+
+                FieldSchema(
+                    name="page_number",
+                    dtype=DataType.INT64,
+                ),
+
+                FieldSchema(
+                    name="text",
+                    dtype=DataType.VARCHAR,
+                    max_length=8192,
+                ),
+
+                FieldSchema(
+                    name="embedding",
+                    dtype=DataType.FLOAT_VECTOR,
+                    dim=EMBED_DIM,
+                ),
             ]
             schema = CollectionSchema(fields, description="GraphRAG hybrid vector store")
             _collection = Collection(COLLECTION_NAME, schema)

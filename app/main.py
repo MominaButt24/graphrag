@@ -15,6 +15,7 @@ from src.neo4j_client import close_driver
 from src.milvus_client import close_collection
 from src.retrieval import smart_query, hybrid_answer
 from src.agent import run_agent
+from src.storage import upload_file
 from src.ingest import load_and_chunk, embed_and_ingest
 from src.graph_builder import build_graph_from_chunks
 from src.community import (
@@ -246,6 +247,29 @@ def upload(file: UploadFile = File(...)):
             )
 
         # ----------------------------------------------------
+        # UPLOAD ORIGINAL TO MINIO
+        # ----------------------------------------------------
+
+        try:
+            source_key = upload_file(
+                local_path=save_path,
+                document_id=doc_id,
+                filename=file.filename,
+            )
+
+        except Exception as e:
+            finish_document(
+                doc_id,
+                file.filename,
+                uploaded_by,
+                uploaded_at,
+                0,
+                status="failed",
+            )
+
+            raise _map_pipeline_error(e)
+
+        # ----------------------------------------------------
         # CHUNK DOCUMENT
         # ----------------------------------------------------
 
@@ -290,9 +314,10 @@ def upload(file: UploadFile = File(...)):
         try:
             embed_and_ingest(
                 chunks,
-                source=save_path
+                document_id=doc_id,
+                filename=file.filename,
+                source_key=source_key,
             )
-
         except Exception as e:
             finish_document(
                 doc_id,
@@ -344,7 +369,21 @@ def upload(file: UploadFile = File(...)):
             chunk_count=len(chunks),
             status="done",
         )
-#----
+
+        # ----------------------------------------------------
+        # DELETE TEMPORARY LOCAL FILE
+        # ----------------------------------------------------
+
+        try:
+            os.remove(save_path)
+            logger.info(
+                f"[/upload] deleted temporary local file: {save_path}"
+            )
+        except Exception:
+            logger.exception(
+                f"[/upload] failed to delete temporary file: {save_path}"
+            )
+
         logger.info(
             f"[/upload] completed filename='{file.filename}' "
             f"chunks={len(chunks)}"
