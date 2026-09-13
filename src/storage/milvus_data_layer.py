@@ -1,5 +1,4 @@
 # -----------------------
-import os
 import time
 import uuid as uuid_lib
 
@@ -15,12 +14,8 @@ from pymilvus import (
 import chainlit.data as cl_data
 import chainlit as cl
 
-from dotenv import load_dotenv
-
 from src.chat.history import get_chat_history_collection
-
-
-load_dotenv()
+from src.config.settings import settings
 
 
 # ============================================================
@@ -55,7 +50,7 @@ def get_documents_collection():
     global _documents_collection
 
     if _documents_collection is None:
-        connections.connect(alias="default", uri=os.getenv("MILVUS_URI"), token=os.getenv("MILVUS_TOKEN"))
+        connections.connect(alias="default", uri=settings.milvus_uri, token=settings.milvus_token)
 
         if utility.has_collection(DOCUMENTS_COLLECTION):
             _documents_collection = Collection(DOCUMENTS_COLLECTION)
@@ -132,8 +127,8 @@ def get_threads_collection():
 
         connections.connect(
             alias="default",
-            uri=os.getenv("MILVUS_URI"),
-            token=os.getenv("MILVUS_TOKEN"),
+            uri=settings.milvus_uri,
+            token=settings.milvus_token,
         )
 
         if utility.has_collection(THREADS_COLLECTION):
@@ -211,8 +206,8 @@ def get_users_collection():
 
         connections.connect(
             alias="default",
-            uri=os.getenv("MILVUS_URI"),
-            token=os.getenv("MILVUS_TOKEN"),
+            uri=settings.milvus_uri,
+            token=settings.milvus_token,
         )
 
         if utility.has_collection(USERS_COLLECTION):

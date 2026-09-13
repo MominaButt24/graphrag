@@ -1,22 +1,12 @@
 import networkx as nx
 import igraph as ig
 import leidenalg
+
+from src.config.settings import settings
+from src.generation.llm import get_llm
 from src.storage.neo4j_client import get_driver
 
-
-from langchain.chat_models import init_chat_model
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-llm = init_chat_model(
-    model=os.getenv("LLM_MODEL"),
-    model_provider="openai",
-    api_key=os.getenv("LLM_API_KEY"),
-    base_url=os.getenv("LLM_BASE_URL"),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-)
+llm = get_llm()
 
 def load_graph_from_neo4j():
     """Step 1: pull nodes + relationships out of Neo4j into a NetworkX graph."""

@@ -1,20 +1,12 @@
-import os
 import boto3
-from dotenv import load_dotenv
 
-load_dotenv()
-
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
-MINIO_BUCKET = os.getenv("MINIO_BUCKET")
-
+from src.config.settings import settings
 
 s3_client = boto3.client(
     "s3",
-    endpoint_url=MINIO_ENDPOINT,
-    aws_access_key_id=MINIO_ACCESS_KEY,
-    aws_secret_access_key=MINIO_SECRET_KEY,
+    endpoint_url=settings.minio_endpoint,
+    aws_access_key_id=settings.minio_access_key,
+    aws_secret_access_key=settings.minio_secret_key,
 )
 
 
@@ -28,7 +20,7 @@ def upload_file(local_path: str, document_id: str, filename: str) -> str:
 
     s3_client.upload_file(
         local_path,
-        MINIO_BUCKET,
+        settings.minio_bucket,
         object_key,
     )
 

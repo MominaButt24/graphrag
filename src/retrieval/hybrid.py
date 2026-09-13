@@ -1,25 +1,16 @@
-from src.logger_config import get_logger
+from src.config.logging import get_logger
 import sentry_sdk
-from langchain.chat_models import init_chat_model
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import os
-from dotenv import load_dotenv
+
+from src.generation.llm import get_llm
 from src.retrieval.graph import smart_query
 from src.retrieval.vector import vector_search
 from src.retrieval.reranker import rerank_and_merge
 from src.retrieval.relevance import _set_retrieval_metadata
 
-load_dotenv()
-
 logger = get_logger(__name__)
 
-llm = init_chat_model(
-    model=os.getenv("LLM_MODEL"),
-    model_provider="openai",
-    api_key=os.getenv("LLM_API_KEY"),
-    base_url=os.getenv("LLM_BASE_URL"),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-)
+llm = get_llm()
 
 
 

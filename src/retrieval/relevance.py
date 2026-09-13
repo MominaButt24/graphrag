@@ -1,19 +1,10 @@
-from src.logger_config import get_logger
-from langchain.chat_models import init_chat_model
-import os
-from dotenv import load_dotenv
+from src.config.logging import get_logger
 
-load_dotenv()
+from src.generation.llm import get_llm
 
 logger = get_logger(__name__)
 
-llm = init_chat_model(
-    model=os.getenv("LLM_MODEL"),
-    model_provider="openai",
-    api_key=os.getenv("LLM_API_KEY"),
-    base_url=os.getenv("LLM_BASE_URL"),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-)
+llm = get_llm()
 
 from threading import Lock
 

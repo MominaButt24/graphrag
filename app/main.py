@@ -28,7 +28,7 @@ from src.graph.community import (
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from chainlit.utils import mount_chainlit
-from src.logger_config import setup_logging, get_logger
+from src.config.logging import setup_logging, get_logger
 
 load_dotenv()
 

@@ -1,21 +1,12 @@
 from src.storage.milvus_client import get_collection, get_embedder
-from src.logger_config import get_logger
+from src.config.logging import get_logger
 import sentry_sdk
-from langchain.chat_models import init_chat_model
-import os
-from dotenv import load_dotenv
 
-load_dotenv()
+from src.generation.llm import get_llm
 
 logger = get_logger(__name__)
 
-llm = init_chat_model(
-    model=os.getenv("LLM_MODEL"),
-    model_provider="openai",
-    api_key=os.getenv("LLM_API_KEY"),
-    base_url=os.getenv("LLM_BASE_URL"),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-)
+llm = get_llm()
 
 
 def vector_search(question: str, top_k: int = 5) -> list[dict]:

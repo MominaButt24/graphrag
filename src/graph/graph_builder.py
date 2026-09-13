@@ -1,23 +1,10 @@
 from langchain_experimental.graph_transformers import LLMGraphTransformer
-# from langchain_groq import ChatGroq
 from src.storage.neo4j_client import get_graph  # Neo4jGraph wrapper
 import time
-import os
-from dotenv import load_dotenv
 
-from langchain_openai import ChatOpenAI
-from langchain.chat_models import init_chat_model
+from src.generation.llm import get_llm
 
-load_dotenv(override=True)
-# llm = ChatGroq(model="qwen/qwen3.6-27b", temperature=0)
-
-llm = init_chat_model(
-    model=os.getenv("LLM_MODEL"),
-    model_provider="openai", 
-    api_key=os.getenv("LLM_API_KEY"),
-    base_url=os.getenv("LLM_BASE_URL"),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-)
+llm = get_llm()
 
 # llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
 

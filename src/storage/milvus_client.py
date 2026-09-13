@@ -1,12 +1,10 @@
-import os
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
 from sentence_transformers import SentenceTransformer
-from dotenv import load_dotenv
 
-load_dotenv()
+from src.config.settings import settings
 
 COLLECTION_NAME = "graphrag_documents"
-EMBED_DIM = 384  
+EMBED_DIM = 384
 
 _collection = None  # module-level singleton, mirrors _driver in neo4j_client.py
 _embedder = None
@@ -24,8 +22,8 @@ def get_collection():
     if _collection is None:
         connections.connect(
             alias="default",
-            uri=os.getenv("MILVUS_URI"),
-            token=os.getenv("MILVUS_TOKEN"),
+            uri=settings.milvus_uri,
+            token=settings.milvus_token,
         )
         if utility.has_collection(COLLECTION_NAME):
             _collection = Collection(COLLECTION_NAME)

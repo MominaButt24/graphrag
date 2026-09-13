@@ -1,33 +1,17 @@
-import os
 import json
-from dotenv import load_dotenv
 
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage
 
-load_dotenv()
+from src.generation.llm import get_llm
 
 
 # ============================================================
 # LLM
 # ============================================================
 
-_llm = None
-
 
 def get_planner_llm():
-    global _llm
-
-    if _llm is None:
-        _llm = init_chat_model(
-            model=os.getenv("LLM_MODEL"),
-            model_provider="openai",
-            api_key=os.getenv("LLM_API_KEY"),
-            base_url=os.getenv("LLM_BASE_URL"),
-            max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-        )
-
-    return _llm
+    return get_llm()
 
 
 # ============================================================

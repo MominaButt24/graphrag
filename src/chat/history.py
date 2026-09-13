@@ -1,16 +1,16 @@
-# -----------------------
-import os
 import time
 import random
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
-from dotenv import load_dotenv
+
+from src.config.settings import settings
 
 # Reuse the embedder singleton from milvus_client.py instead of loading a
 # second copy of all-MiniLM-L6-v2 into memory.
-# Adjust this import path if your module lives elsewhere (e.g. src.milvus_client).
 from src.storage.milvus_client import get_embedder
 from src.agent.planner import create_plan
-load_dotenv()
+from src.generation.llm import get_llm
+llm = get_llm()
+
 
 COLLECTION_NAME = "chat_history"
 EMBED_DIM = 384
@@ -23,8 +23,8 @@ def get_chat_history_collection():
     if _collection is None:
         connections.connect(
             alias="default",
-            uri=os.getenv("MILVUS_URI"),
-            token=os.getenv("MILVUS_TOKEN"),
+            uri=settings.milvus_uri,
+            token=settings.milvus_token,
         )
         if utility.has_collection(COLLECTION_NAME):
             _collection = Collection(COLLECTION_NAME)
@@ -61,21 +61,6 @@ def close_collection():
 
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-
-_llm = None  # module-level singleton, same pattern as _collection
-
-
-def get_llm():
-    global _llm
-    if _llm is None:
-        _llm = init_chat_model(
-            model=os.getenv("LLM_MODEL"),
-            model_provider="openai",
-            api_key=os.getenv("LLM_API_KEY"),
-            base_url=os.getenv("LLM_BASE_URL"),
-            max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-        )
-    return _llm
 
 
 def build_messages(history: list[dict], current_query: str, retrieved_context: str = "") -> list:
@@ -152,7 +137,7 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
     answer = agent_result["answer"]
     retrieval = agent_result.get("retrieval")
 
-    from src.logger_config import get_logger
+    from src.config.logging import get_logger
     logger = get_logger(__name__)
     logger.info(f"[chat_history_client][answer_query] FINAL retrieval being returned to Chainlit: {retrieval is not None}")
 

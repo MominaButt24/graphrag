@@ -6,34 +6,25 @@ knowledge base first and only reaches for Tavily when it comes back
 empty or insufficient — this is "not in the graph" turning into a real
 fallback instead of a dead end.
 """
-
-import os
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from langchain.agents import create_agent
-from langchain.chat_models import init_chat_model
 
 from langfuse.langchain import CallbackHandler
 
 from src.retrieval.hybrid import hybrid_answer
 from src.retrieval.relevance import get_retrieval_metadata
 from src.retrieval.vector import kb_relevance_score
-from src.logger_config import get_logger
+from src.config.logging import get_logger
+from src.generation.llm import get_llm
 
-load_dotenv()
+llm = get_llm()
 
 logger = get_logger(__name__)
 
 langfuse_handler = CallbackHandler()
 
-llm = init_chat_model(
-    model=os.getenv("LLM_MODEL"),
-    model_provider="openai",
-    api_key=os.getenv("LLM_API_KEY"),
-    base_url=os.getenv("LLM_BASE_URL"),
-    max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-)
 
 RELEVANCE_THRESHOLD = 0.25
 
@@ -146,7 +137,7 @@ def run_agent(question: str, history: list[dict] | None = None) -> dict:
 
 
 if __name__ == "__main__":
-    from src.logger_config import setup_logging
+    from src.config.logging import setup_logging
     setup_logging()
 
     test_questions = [

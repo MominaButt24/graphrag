@@ -1,29 +1,13 @@
-import os
 import time
 import random
-from src.storage.milvus_client import get_collection, get_embedder
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
-from dotenv import load_dotenv
-from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
-_llm = None  
+from src.config.settings import settings
+from src.generation.llm import get_llm
+from src.storage.milvus_client import get_embedder
 
-
-def get_llm():
-    global _llm
-    if _llm is None:
-        _llm = init_chat_model(
-            model=os.getenv("LLM_MODEL"),
-            model_provider="openai",
-            api_key=os.getenv("LLM_API_KEY"),
-            base_url=os.getenv("LLM_BASE_URL"),
-            max_tokens=int(os.getenv("LLM_MAX_TOKENS")),
-        )
-    return _llm
-
-
-load_dotenv()
+llm = get_llm()
 
 COLLECTION_NAME = "chat_history"
 EMBED_DIM = 384
@@ -36,8 +20,8 @@ def get_chat_history_collection():
     if _collection is None:
         connections.connect(
             alias="default",
-            uri=os.getenv("MILVUS_URI"),
-            token=os.getenv("MILVUS_TOKEN"),
+            uri=settings.milvus_uri,
+            token=settings.milvus_token,
         )
         if utility.has_collection(COLLECTION_NAME):
             _collection = Collection(COLLECTION_NAME)
