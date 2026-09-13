@@ -17,7 +17,7 @@ import chainlit as cl
 
 from dotenv import load_dotenv
 
-from src.chat_history_client import get_chat_history_collection
+from src.chat.history import get_chat_history_collection
 
 
 load_dotenv()

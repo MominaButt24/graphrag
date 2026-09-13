@@ -3,7 +3,9 @@ import os
 import chainlit as cl
 import chainlit.data as cl_data
 
-from src.chat_history_client import answer_query, get_relevant_history
+from src.chat.history import get_relevant_history, answer_query
+
+
 from src.storage.milvus_data_layer import get_threads_collection  # noqa: F401
 
 

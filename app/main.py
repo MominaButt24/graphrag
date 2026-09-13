@@ -13,8 +13,9 @@ from openai import APIConnectionError, APIError
 
 from src.storage.neo4j_client import close_driver
 from src.storage.milvus_client import close_collection
-from src.retrieval import smart_query, hybrid_answer
-from src.agent import run_agent
+from src.retrieval.graph import smart_query
+from src.retrieval.hybrid import hybrid_answer
+from src.agent.agent import run_agent
 from src.storage.storage import upload_file
 from src.ingestion.ingest import load_and_chunk, embed_and_ingest
 from src.graph.graph_builder import build_graph_from_chunks

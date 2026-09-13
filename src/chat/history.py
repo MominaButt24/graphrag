@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # second copy of all-MiniLM-L6-v2 into memory.
 # Adjust this import path if your module lives elsewhere (e.g. src.milvus_client).
 from src.storage.milvus_client import get_embedder
-from src.planner import create_plan
+from src.agent.planner import create_plan
 load_dotenv()
 
 COLLECTION_NAME = "chat_history"
@@ -108,8 +108,7 @@ def generate_answer(current_query: str, history: list[dict], retrieved_context: 
     return response.content
 
 
-# Your existing hybrid retrieval — adjust import path if retrieval.py lives elsewhere.
-from src.agent import run_agent
+from src.agent.agent import run_agent
 
 
 def answer_query(thread_id: str, user_id: str, query: str) -> str:

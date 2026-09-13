@@ -16,11 +16,9 @@ from langchain.chat_models import init_chat_model
 
 from langfuse.langchain import CallbackHandler
 
-from src.retrieval import (
-    hybrid_answer,
-    kb_relevance_score,
-    get_retrieval_metadata,
-)
+from src.retrieval.hybrid import hybrid_answer
+from src.retrieval.relevance import get_retrieval_metadata
+from src.retrieval.vector import kb_relevance_score
 from src.logger_config import get_logger
 
 load_dotenv()
