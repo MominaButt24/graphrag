@@ -10,8 +10,8 @@ Run once: uv run python -m src.backfill_documents
 
 import time
 from collections import Counter
-from src.milvus_client import get_collection
-from src.milvus_data_layer import get_documents_collection
+from src.storage.milvus_client import get_collection
+from src.storage.milvus_data_layer import get_documents_collection
 
 MAX_QUERY_LIMIT = 16384  # Milvus's hard ceiling on offset + limit combined
 

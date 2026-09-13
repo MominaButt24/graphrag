@@ -1,6 +1,6 @@
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import PyPDFLoader  # swap per file type
-from src.milvus_client import get_collection, get_embedder
+from src.storage.milvus_client import get_collection, get_embedder
 
 def load_and_chunk(filepath: str, chunk_size: int = 800, chunk_overlap: int = 100):
     loader = PyPDFLoader(filepath)

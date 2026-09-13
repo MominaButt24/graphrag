@@ -11,11 +11,11 @@ from neo4j.exceptions import ServiceUnavailable as Neo4jUnavailable
 from pymilvus import MilvusException
 from openai import APIConnectionError, APIError
 
-from src.neo4j_client import close_driver
-from src.milvus_client import close_collection
+from src.storage.neo4j_client import close_driver
+from src.storage.milvus_client import close_collection
 from src.retrieval import smart_query, hybrid_answer
 from src.agent import run_agent
-from src.storage import upload_file
+from src.storage.storage import upload_file
 from src.ingest import load_and_chunk, embed_and_ingest
 from src.graph_builder import build_graph_from_chunks
 from src.community import (
@@ -186,7 +186,7 @@ def query_agent(payload: Query):
 #     }
 @router.post("/upload")
 def upload(file: UploadFile = File(...)):
-    from src.milvus_data_layer import start_document, finish_document
+    from src.storage.milvus_data_layer import start_document, finish_document
 
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(
@@ -436,7 +436,7 @@ def upload(file: UploadFile = File(...)):
 
 @router.get("/documents")
 def get_documents():
-    from src.milvus_data_layer import list_documents
+    from src.storage.milvus_data_layer import list_documents
 
     documents = list_documents()
 

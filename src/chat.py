@@ -1,7 +1,7 @@
 import os
 import time
 import random
-from src.milvus_client import get_collection, get_embedder
+from src.storage.milvus_client import get_collection, get_embedder
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
 from dotenv import load_dotenv
 from langchain.chat_models import init_chat_model

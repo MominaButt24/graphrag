@@ -1,4 +1,4 @@
-from src.neo4j_client import get_driver
+from src.storage.neo4j_client import get_driver
 
 driver = get_driver()
 with driver.session() as session:

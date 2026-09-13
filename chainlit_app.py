@@ -4,7 +4,7 @@ import chainlit as cl
 import chainlit.data as cl_data
 
 from src.chat_history_client import answer_query, get_relevant_history
-from src.milvus_data_layer import get_threads_collection  # noqa: F401
+from src.storage.milvus_data_layer import get_threads_collection  # noqa: F401
 
 
 # ============================================================
@@ -210,7 +210,7 @@ async def on_message(message: cl.Message):
         import shutil
 
         from src.ingest import ingest_file_to_milvus
-        from src.milvus_data_layer import (
+        from src.storage.milvus_data_layer import (
             start_document,
             finish_document,
         )

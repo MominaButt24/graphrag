@@ -1,4 +1,4 @@
-from src.storage import s3_client, MINIO_BUCKET
+from src.storage.storage import s3_client, MINIO_BUCKET
 
 
 response = s3_client.list_objects_v2(

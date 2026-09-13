@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 # Reuse the embedder singleton from milvus_client.py instead of loading a
 # second copy of all-MiniLM-L6-v2 into memory.
 # Adjust this import path if your module lives elsewhere (e.g. src.milvus_client).
-from src.milvus_client import get_embedder
+from src.storage.milvus_client import get_embedder
 from src.planner import create_plan
 load_dotenv()
 

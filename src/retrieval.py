@@ -1,5 +1,5 @@
-from src.neo4j_client import get_driver
-from src.milvus_client import get_collection, get_embedder
+from src.storage.neo4j_client import get_driver
+from src.storage.milvus_client import get_collection, get_embedder
 from src.logger_config import get_logger
 import sentry_sdk
 from langchain.chat_models import init_chat_model

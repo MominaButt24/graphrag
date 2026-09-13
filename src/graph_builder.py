@@ -1,6 +1,6 @@
 from langchain_experimental.graph_transformers import LLMGraphTransformer
 # from langchain_groq import ChatGroq
-from src.neo4j_client import get_graph  # Neo4jGraph wrapper
+from src.storage.neo4j_client import get_graph  # Neo4jGraph wrapper
 import time
 import os
 from dotenv import load_dotenv

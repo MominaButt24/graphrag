@@ -1,7 +1,7 @@
 import networkx as nx
 import igraph as ig
 import leidenalg
-from src.neo4j_client import get_driver
+from src.storage.neo4j_client import get_driver
 
 
 from langchain.chat_models import init_chat_model
