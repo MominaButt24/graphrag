@@ -16,9 +16,9 @@ from src.storage.milvus_client import close_collection
 from src.retrieval import smart_query, hybrid_answer
 from src.agent import run_agent
 from src.storage.storage import upload_file
-from src.ingest import load_and_chunk, embed_and_ingest
-from src.graph_builder import build_graph_from_chunks
-from src.community import (
+from src.ingestion.ingest import load_and_chunk, embed_and_ingest
+from src.graph.graph_builder import build_graph_from_chunks
+from src.graph.community import (
     load_graph_from_neo4j,
     run_leiden,
     write_communities_to_neo4j,

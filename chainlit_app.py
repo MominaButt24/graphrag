@@ -209,7 +209,7 @@ async def on_message(message: cl.Message):
         import uuid as uuid_lib
         import shutil
 
-        from src.ingest import ingest_file_to_milvus
+        from src.ingestion.ingest import ingest_file_to_milvus
         from src.storage.milvus_data_layer import (
             start_document,
             finish_document,
