@@ -6,7 +6,6 @@ knowledge base first and only reaches for Tavily when it comes back
 empty or insufficient — this is "not in the graph" turning into a real
 fallback instead of a dead end.
 """
-from dotenv import load_dotenv
 from langchain_core.tools import tool
 from langchain_tavily import TavilySearch
 from langchain.agents import create_agent

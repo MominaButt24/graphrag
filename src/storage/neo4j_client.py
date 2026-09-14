@@ -26,3 +26,25 @@ def get_graph():
         username=settings.neo4j_username,
         password=settings.neo4j_password,
     )
+
+
+def delete_graph_document(document_id: str):
+    """Delete all graph nodes and relations tagged with the same document_id property."""
+    driver = get_driver()
+    with driver.session() as session:
+        session.run(
+            """
+            MATCH ()-[r]->()
+            WHERE r.document_id = $document_id
+            DELETE r
+            """,
+            {"document_id": document_id},
+        )
+        session.run(
+            """
+            MATCH (n)
+            WHERE n.document_id = $document_id
+            DETACH DELETE n
+            """,
+            {"document_id": document_id},
+        )

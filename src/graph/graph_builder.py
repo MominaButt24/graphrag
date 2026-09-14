@@ -15,13 +15,19 @@ transformer = LLMGraphTransformer(
     ignore_tool_usage=True,
 )
 
-def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 1.0):
+def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 1.0, document_id: str = None):
     graph = get_graph()
     failed_chunks = []
-
     for i, chunk in enumerate(chunks):
         try:
             graph_documents = transformer.convert_to_graph_documents([chunk])
+            if document_id:
+                for gd in graph_documents:
+                    for node in gd.nodes:
+                        node.properties["document_id"] = document_id
+                    for rel in gd.relationships:
+                        rel.properties["document_id"] = document_id
+
             node_count = sum(len(gd.nodes) for gd in graph_documents)
             rel_count = sum(len(gd.relationships) for gd in graph_documents)
             graph.add_graph_documents(graph_documents)

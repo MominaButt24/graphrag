@@ -106,6 +106,13 @@ def finish_document(doc_id: str, filename: str, uploaded_by: str, uploaded_at: i
     collection.flush()
 
 
+def delete_document(doc_id: str):
+    """Remove the metadata row that tracks one uploaded file in the Milvus docs sidebar collection."""
+    collection = get_documents_collection()
+    collection.delete(expr=f'id == "{doc_id}"')
+    collection.flush()
+
+
 def list_documents():
     collection = get_documents_collection()
     rows = collection.query(

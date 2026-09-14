@@ -32,6 +32,9 @@ class Settings:
     minio_secret_key: Optional[str] = os.getenv("MINIO_SECRET_KEY")
     minio_bucket: Optional[str] = os.getenv("MINIO_BUCKET")
 
+    sentry_dsn: str = os.getenv("SENTRY_DSN", "").strip()
+    sentry_environment: str = os.getenv("SENTRY_ENVIRONMENT", "development")
+
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
 

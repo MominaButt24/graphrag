@@ -96,6 +96,13 @@ def get_collection():
     return _collection
 
 
+def delete_document_chunks(document_id: str):
+    """Delete every chunk row in the vector collection for one document id."""
+    collection = get_collection()
+    collection.delete(expr=f'document_id == "{document_id}"')
+    collection.flush()
+
+
 def close_collection():
     global _collection
     _collection = None
