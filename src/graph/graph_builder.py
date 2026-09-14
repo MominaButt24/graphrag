@@ -15,6 +15,7 @@ transformer = LLMGraphTransformer(
     ignore_tool_usage=True,
 )
 
+
 def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 1.0, document_id: str = None):
     graph = get_graph()
     failed_chunks = []
@@ -30,11 +31,21 @@ def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 
 
             node_count = sum(len(gd.nodes) for gd in graph_documents)
             rel_count = sum(len(gd.relationships) for gd in graph_documents)
+
+            # A graph extraction with zero nodes and zero relationships is not
+            # a successful extraction. Surface it as a chunk failure so callers
+            # can stop the upload metadata lifecycle from reporting "done".
+            if node_count == 0 and rel_count == 0:
+                message = (
+                    f"[{i+1}/{len(chunks)}] extracted 0 nodes, 0 relationships "
+                    "— graph conversion produced an empty graph for this chunk"
+                )
+                print(message)
+                failed_chunks.append((i, chunk, message))
+                continue
+
             graph.add_graph_documents(graph_documents)
-            if node_count == 0:
-                print(f"[{i+1}/{len(chunks)}] ran OK but extracted 0 nodes, 0 relationships — nothing written for this chunk")
-            else:
-                print(f"[{i+1}/{len(chunks)}] extracted {node_count} nodes, {rel_count} relationships — written OK")
+            print(f"[{i+1}/{len(chunks)}] extracted {node_count} nodes, {rel_count} relationships — written OK")
         except Exception as e:
             print(f"[{i+1}/{len(chunks)}] FAILED: {e}")
             failed_chunks.append((i, chunk, str(e)))

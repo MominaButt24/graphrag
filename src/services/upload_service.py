@@ -101,6 +101,23 @@ def upload_document(file: UploadFile):
         )
         raise map_pipeline_error(e)
 
+    if failed:
+        finish_document(
+            doc_id,
+            file.filename,
+            uploaded_by,
+            uploaded_at,
+            len(chunks),
+            status="failed",
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=(
+                "Graph extraction failed for one or more chunks — "
+                f"{len(failed)} chunk(s) produced zero graph nodes or relationships."
+            ),
+        )
+
     try:
         embed_and_ingest(
             chunks,
