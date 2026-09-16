@@ -122,6 +122,24 @@ def list_documents():
     )
     return sorted(rows, key=lambda r: r["uploaded_at"], reverse=True)
 
+def get_document(document_id: str):
+    """Get one document's metadata by document ID."""
+    collection = get_documents_collection()
+
+    rows = collection.query(
+        expr=f'id == "{document_id}"',
+        output_fields=[
+            "id",
+            "filename",
+            "status",
+            "chunk_count",
+            "uploaded_by",
+            "uploaded_at",
+        ],
+        limit=1,
+    )
+
+    return rows[0] if rows else None
 
 # ============================================================
 # THREADS COLLECTION

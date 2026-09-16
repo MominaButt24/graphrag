@@ -5,177 +5,174 @@ import shutil
 from fastapi import HTTPException, UploadFile
 
 from src.config.logging import get_logger
-from src.services.errors import map_pipeline_error
 from src.storage.milvus_data_layer import start_document, finish_document
 from src.storage.storage import upload_file
-from src.ingestion.ingest import load_and_chunk, embed_and_ingest
-from src.graph.graph_builder import build_graph_from_chunks
-from src.graph.community import (
-    load_graph_from_neo4j,
-    run_leiden,
-    write_communities_to_neo4j,
-    build_all_community_summaries,
-)
+from src.queue.redis_queue import enqueue_ingestion_job
 
 logger = get_logger(__name__)
 
 
-def upload_document(file: UploadFile):
-    """Application workflow for a PDF upload request.
+def upload_documents(files: list[UploadFile]):
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail="No files provided.",
+        )
 
-    This function owns the document metadata lifecycle and the ingestion
-    orchestration. The route file only translates the HTTP request into
-    this service call.
-    """
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are supported.")
-
-    logger.info(f"[/upload] filename='{file.filename}'")
+    results = []
 
     os.makedirs("data/raw", exist_ok=True)
-    save_path = f"data/raw/{file.filename}"
 
-    doc_id = str(uuid.uuid4())
-    uploaded_by = "api-upload"
-    uploaded_at = start_document(
-        doc_id=doc_id,
-        filename=file.filename,
-        uploaded_by=uploaded_by,
-    )
+    for file in files:
 
-    try:
-        with open(save_path, "wb") as f:
-            shutil.copyfileobj(file.file, f)
-    except Exception:
-        logger.exception("Failed to save uploaded file")
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            0,
-            status="failed",
+        if not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Only PDF files are supported: {file.filename}",
+            )
+
+        doc_id = str(uuid.uuid4())
+        uploaded_by = "api-upload"
+
+        # Avoid filename collisions.
+        save_path = os.path.join(
+            "data/raw",
+            f"{doc_id}_{file.filename}",
         )
-        raise HTTPException(status_code=500, detail="Failed to save the uploaded file.")
 
-    try:
-        source_key = upload_file(
-            local_path=save_path,
-            document_id=doc_id,
+        logger.info(
+            f"[/upload] receiving filename='{file.filename}' "
+            f"document_id='{doc_id}'"
+        )
+
+        uploaded_at = start_document(
+            doc_id=doc_id,
             filename=file.filename,
-        )
-    except Exception as e:
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            0,
-            status="failed",
-        )
-        raise map_pipeline_error(e)
-
-    try:
-        chunks = load_and_chunk(save_path)
-    except Exception as e:
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            0,
-            status="failed",
-        )
-        raise map_pipeline_error(e)
-
-    try:
-        failed = build_graph_from_chunks(chunks, document_id=doc_id)
-    except Exception as e:
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            len(chunks),
-            status="failed",
-        )
-        raise map_pipeline_error(e)
-
-    if failed:
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            len(chunks),
-            status="failed",
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=(
-                "Graph extraction failed for one or more chunks — "
-                f"{len(failed)} chunk(s) produced zero graph nodes or relationships."
-            ),
+            uploaded_by=uploaded_by,
         )
 
-    try:
-        embed_and_ingest(
-            chunks,
-            document_id=doc_id,
-            filename=file.filename,
-            source_key=source_key,
+        # --------------------------------------------------
+        # 1. Save temporary local copy
+        # --------------------------------------------------
+
+        try:
+            with open(save_path, "wb") as f:
+                shutil.copyfileobj(file.file, f)
+
+        except Exception:
+            logger.exception(
+                f"Failed to save uploaded file: {file.filename}"
+            )
+
+            finish_document(
+                doc_id,
+                file.filename,
+                uploaded_by,
+                uploaded_at,
+                0,
+                status="failed",
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to save {file.filename}.",
+            )
+
+        # --------------------------------------------------
+        # 2. Upload permanent original to MinIO
+        # --------------------------------------------------
+
+        try:
+            source_key = upload_file(
+                local_path=save_path,
+                document_id=doc_id,
+                filename=file.filename,
+            )
+
+        except Exception:
+            logger.exception(
+                f"Failed to upload to MinIO: {file.filename}"
+            )
+
+            finish_document(
+                doc_id,
+                file.filename,
+                uploaded_by,
+                uploaded_at,
+                0,
+                status="failed",
+            )
+
+            # Local file is no longer needed.
+            try:
+                os.remove(save_path)
+            except OSError:
+                pass
+
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to store {file.filename}.",
+            )
+
+        # --------------------------------------------------
+        # 3. Local copy is no longer needed
+        # --------------------------------------------------
+
+        try:
+            os.remove(save_path)
+
+            logger.info(
+                f"[/upload] deleted temporary local file: {save_path}"
+            )
+
+        except OSError:
+            logger.exception(
+                f"Failed to delete temporary local file: {save_path}"
+            )
+
+        # --------------------------------------------------
+        # 4. Create Redis ingestion job
+        # --------------------------------------------------
+
+        job = {
+            "document_id": doc_id,
+            "filename": file.filename,
+            "source_key": source_key,
+            "uploaded_by": uploaded_by,
+            "uploaded_at": uploaded_at,
+        }
+
+        try:
+            enqueue_ingestion_job(job)
+
+        except Exception:
+            logger.exception(
+                f"Failed to enqueue ingestion job: {file.filename}"
+            )
+
+            finish_document(
+                doc_id,
+                file.filename,
+                uploaded_by,
+                uploaded_at,
+                0,
+                status="failed",
+            )
+
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to queue {file.filename}.",
+            )
+
+        results.append(
+            {
+                "document_id": doc_id,
+                "filename": file.filename,
+                "status": "queued",
+            }
         )
-    except Exception as e:
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            len(chunks),
-            status="failed",
-        )
-        raise map_pipeline_error(e)
-
-    try:
-        G = load_graph_from_neo4j()
-        community_map = run_leiden(G)
-        write_communities_to_neo4j(community_map)
-        build_all_community_summaries()
-    except Exception as e:
-        finish_document(
-            doc_id,
-            file.filename,
-            uploaded_by,
-            uploaded_at,
-            len(chunks),
-            status="failed",
-        )
-        raise map_pipeline_error(e)
-
-    finish_document(
-        doc_id=doc_id,
-        filename=file.filename,
-        uploaded_by=uploaded_by,
-        uploaded_at=uploaded_at,
-        chunk_count=len(chunks),
-        status="done",
-    )
-
-    try:
-        os.remove(save_path)
-        logger.info(f"[/upload] deleted temporary local file: {save_path}")
-    except Exception:
-        logger.exception(f"[/upload] failed to delete temporary file: {save_path}")
-
-    logger.info(
-        f"[/upload] completed filename='{file.filename}' "
-        f"chunks={len(chunks)}"
-    )
 
     return {
-        "status": "processed",
-        "filename": file.filename,
-        "chunks": len(chunks),
-        "failed_chunks": len(failed),
-        "document_id": doc_id,
+        "status": "queued",
+        "documents": results,
     }

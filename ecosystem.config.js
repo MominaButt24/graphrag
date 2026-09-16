@@ -13,7 +13,12 @@ module.exports = {
       args: "gradio_app.py",
       cwd: __dirname,
     },
-
+    {
+      name: "graphrag-worker",
+      script: "./env/bin/python",
+      args: "-m src.workers.ingestion_worker",
+      cwd: __dirname,
+    },
     // {
     //   name: "chainlit-app",
     //   script: "./env/bin/python",

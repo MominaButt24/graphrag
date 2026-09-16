@@ -1,10 +1,7 @@
-# -----------------------------
-import os
 import chainlit as cl
 import chainlit.data as cl_data
 
 from src.chat.history import get_relevant_history, answer_query
-
 
 from src.storage.milvus_data_layer import get_threads_collection  # noqa: F401
 
@@ -16,8 +13,8 @@ from src.storage.milvus_data_layer import get_threads_collection  # noqa: F401
 @cl.password_auth_callback
 def auth_callback(username: str, password: str):
 
-    # TODO:
-    # Replace this with your real user database later.
+  
+    # ... Replace this with real user database later...
     valid_users = {
         "momna": "changeme"
     }
@@ -116,12 +113,15 @@ async def on_chat_start():
 # RETRIEVAL EXPLORER
 # ============================================================
 
-def format_retrieval_explorer(retrieval: dict | None) -> str | None:
+def format_retrieval_explorer(
+    retrieval: dict | None
+) -> str | None:
     """
-    Builds the Phase 2 "Retrieval Explorer" display from the metadata
-    retrieval.py already captures in hybrid_answer().
+    Builds the Retrieval Explorer display from the metadata
+    captured by retrieval.py / hybrid_answer().
 
-    Returns None when this turn never ran the hybrid pipeline.
+    Returns a message explaining that no KB retrieval ran
+    when this turn did not use the hybrid retrieval pipeline.
     """
 
     if not retrieval:
@@ -141,7 +141,8 @@ def format_retrieval_explorer(retrieval: dict | None) -> str | None:
     ]
 
     lines.append(
-        f"- Vector candidates: {stats.get('vector_candidates', 0)}"
+        f"- Vector candidates: "
+        f"{stats.get('vector_candidates', 0)}"
     )
 
     lines.append(
@@ -203,143 +204,12 @@ async def on_message(message: cl.Message):
     user_id = cl.user_session.get("user_id")
 
     # --------------------------------------------------------
-    # Handle uploaded files
-    # --------------------------------------------------------
-
-    if message.elements:
-
-        import uuid as uuid_lib
-        import shutil
-
-        from src.ingestion.ingest import ingest_file_to_milvus
-        from src.storage.milvus_data_layer import (
-            start_document,
-            finish_document,
-        )
-
-        UPLOAD_DIR = "data/uploads"
-
-        os.makedirs(
-            UPLOAD_DIR,
-            exist_ok=True
-        )
-
-        for element in message.elements:
-
-            if hasattr(element, "path"):
-
-                filename = (
-                    getattr(element, "name", None)
-                    or os.path.basename(element.path)
-                )
-
-                # ------------------------------------------------
-                # Create document ID
-                # ------------------------------------------------
-
-                doc_id = str(
-                    uuid_lib.uuid4()
-                )
-
-                # ------------------------------------------------
-                # Register document as processing
-                # ------------------------------------------------
-
-                uploaded_at = start_document(
-                    doc_id,
-                    filename,
-                    user_id
-                )
-
-                # ------------------------------------------------
-                # Save a permanent copy
-                #
-                # Chainlit's element.path is temporary.
-                # ------------------------------------------------
-
-                permanent_path = os.path.join(
-                    UPLOAD_DIR,
-                    f"{doc_id}_{filename}"
-                )
-
-                shutil.copy(
-                    element.path,
-                    permanent_path
-                )
-
-                try:
-
-                    # ------------------------------------------------
-                    # Ingest document into Milvus
-                    # ------------------------------------------------
-
-                    result = ingest_file_to_milvus(
-                        element.path
-                    )
-
-                    # ------------------------------------------------
-                    # Determine chunk count
-                    # ------------------------------------------------
-
-                    chunk_count = (
-                        result
-                        if isinstance(result, int)
-                        else len(result)
-                        if hasattr(result, "__len__")
-                        else 0
-                    )
-
-                    # ------------------------------------------------
-                    # Mark document as completed
-                    # ------------------------------------------------
-
-                    finish_document(
-                        doc_id,
-                        filename,
-                        user_id,
-                        uploaded_at,
-                        chunk_count,
-                        status="done",
-                    )
-
-                except Exception:
-
-                    # ------------------------------------------------
-                    # Mark document as failed
-                    # ------------------------------------------------
-
-                    finish_document(
-                        doc_id,
-                        filename,
-                        user_id,
-                        uploaded_at,
-                        0,
-                        status="failed",
-                    )
-
-                    raise
-
-        # --------------------------------------------------------
-        # Upload completed
-        # --------------------------------------------------------
-
-        await cl.Message(
-            content=(
-                f"Ingested {len(message.elements)} file(s). "
-                "Ask away.\n\n"
-                "📚 [View documents](/documents)"
-            )
-        ).send()
-
-        return
-
-    # --------------------------------------------------------
     # Documents shortcut
     #
-    # The actual Documents screen is now available through
-    # the persistent Documents button in the sidebar.
+    # The actual Documents screen is available through the
+    # persistent Documents button in the sidebar.
     #
-    # /docs is kept as a simple redirect for convenience.
+    # /docs is kept as a convenience shortcut.
     # --------------------------------------------------------
 
     if message.content.strip().lower() == "/docs":
@@ -349,6 +219,27 @@ async def on_message(message: cl.Message):
         ).send()
 
         return
+
+    # --------------------------------------------------------
+    # Document uploads are NOT handled here anymore.
+    #
+    # Uploading is now handled by:
+    #
+    # Documents UI
+    #      ↓
+    # FastAPI /api/v1/upload
+    #      ↓
+    # MinIO
+    #      ↓
+    # Redis queue
+    #      ↓
+    # Ingestion worker
+    #      ↓
+    # Milvus + Neo4j
+    #
+    # This prevents having two separate document-ingestion
+    # pipelines inside the application.
+    # --------------------------------------------------------
 
     # --------------------------------------------------------
     # Check whether this is the first real message

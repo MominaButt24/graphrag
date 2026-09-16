@@ -27,6 +27,15 @@ def upload_file(local_path: str, document_id: str, filename: str) -> str:
     return object_key
 
 
+def download_file(source_key: str, local_path: str):
+    """Download the permanent MinIO object to a local worker-side temp path."""
+    s3_client.download_file(
+        Bucket=settings.minio_bucket,
+        Key=source_key,
+        Filename=local_path,
+    )
+
+
 def delete_document_files(document_id: str):
     """Remove every object stored under one uploaded document id in MinIO."""
     prefix = f"{document_id}/"
@@ -50,4 +59,15 @@ def delete_file(object_key: str):
     s3_client.delete_object(
         Bucket=settings.minio_bucket,
         Key=object_key,
+    )
+
+def get_presigned_url(object_key: str, expires_in: int = 3600) -> str:
+    """Generate a temporary URL for viewing/downloading a MinIO object."""
+    return s3_client.generate_presigned_url(
+        ClientMethod="get_object",
+        Params={
+            "Bucket": settings.minio_bucket,
+            "Key": object_key,
+        },
+        ExpiresIn=expires_in,
     )
