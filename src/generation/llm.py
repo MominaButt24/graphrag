@@ -21,6 +21,8 @@ def get_llm():
             api_key=cfg["api_key"],
             base_url=cfg["base_url"],
             max_tokens=cfg["max_tokens"],
+            timeout=cfg["timeout"],
+            max_retries=cfg["max_retries"],
         )
     return _llm
 

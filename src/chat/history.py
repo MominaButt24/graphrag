@@ -1,5 +1,6 @@
 import time
 import random
+
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
 
 from src.config.settings import settings
@@ -7,7 +8,9 @@ from src.config.settings import settings
 # Reuse the embedder singleton from milvus_client.py instead of loading a
 # second copy of all-MiniLM-L6-v2 into memory.
 from src.storage.milvus_client import get_embedder
+from src.agent.plan_state import PlanState
 from src.agent.planner import create_plan
+from src.agent.execution_context import ExecutionContext
 from src.generation.llm import get_llm
 llm = get_llm()
 
@@ -114,25 +117,64 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
         history=history_messages,
     )
 
-    print("[PLANNER] Plan created successfully:")
-    for task in plan["tasks"]:
-        print(f"  {task['id']}. {task['description']}")
+    plan_state = PlanState(plan)
 
-
-#planstate set
-
-# plan_state = PlanState(plan)
-
-#execute
-    print("\n[AGENT] Starting agent...")
-
-    agent_result = run_agent(
-        query,
-        history=history_messages,
+    execution_context = ExecutionContext(
+        user_question=query
     )
+    print("[PLANNER] Plan created:")
+    for task in plan_state.get_plan()["tasks"]:
+        print(
+            f"  {task['id']}. "
+            f"{task['description']} "
+            f"[{task['status']}]"
+        )
 
-    print("[AGENT] Agent completed.")
-   
+
+    print("\n[AGENT] Starting execution...")
+
+    while True:
+        pending_tasks = plan_state.get_pending_tasks()
+
+        if not pending_tasks:
+            break
+
+        task = pending_tasks[0]
+
+        task_id = task["id"]
+
+        plan_state.start_task(task_id)
+
+        print(
+            f"[PLAN] Task {task_id} started: "
+            f"{task['description']}"
+        )
+
+        try:
+            agent_result = run_agent(
+                task["description"],
+                history=history_messages,
+                execution_context=execution_context.get_context(),
+            )
+
+            execution_context.add_result(
+                task_id=task_id,
+                task_description=task["description"],
+                result=agent_result,
+            )
+
+            plan_state.complete_task(task_id)
+
+            print(f"[PLAN] Task {task_id} completed.")
+
+        except Exception:
+            plan_state.fail_task(task_id)
+
+            print(f"[PLAN] Task {task_id} failed.")
+            raise
+
+    print("\n[AGENT] Plan execution completed.")
+    
 
     answer = agent_result["answer"]
     retrieval = agent_result.get("retrieval")

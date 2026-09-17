@@ -20,6 +20,9 @@ class Settings:
     llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL")
     llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "512"))
 
+    llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "60"))
+    llm_max_retries: int = int(os.getenv("LLM_MAX_RETRIES", "1"))
+
     neo4j_uri: Optional[str] = os.getenv("NEO4J_URI")
     neo4j_username: Optional[str] = os.getenv("NEO4J_USERNAME")
     neo4j_password: Optional[str] = os.getenv("NEO4J_PASSWORD")
@@ -37,7 +40,18 @@ class Settings:
 
     log_level: str = os.getenv("LOG_LEVEL", "INFO")
 
-
+    redis_url: str = os.getenv(
+    "REDIS_URL",
+    "redis://localhost:6379/0"
+    )
+    redis_queue_name: str = os.getenv(
+        "REDIS_QUEUE_NAME",
+        "graphrag:ingestion"
+    )
+    redis_queue_chanel: str = os.getenv(
+        "REDIS_QUEUE_CHANNEL",
+        "graphrag:ingestion:channel"
+    )
 settings = Settings()
 
 

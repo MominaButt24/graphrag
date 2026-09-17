@@ -114,26 +114,57 @@ def _extract_text(content) -> str:
     return str(content)
 
 
-def run_agent(question: str, history: list[dict] | None = None) -> dict:
+
+def run_agent(
+    question: str,
+    history: list[dict] | None = None,
+    execution_context: str | None = None,
+) -> dict:
+
     messages = list(history or [])
-    messages.append({"role": "user", "content": question})
+
+    if execution_context:
+        question = f"""
+Previous task execution context:
+
+{execution_context}
+
+Current task:
+{question}
+
+Use the previous task results above when performing the current task.
+"""
+
+    messages.append({
+        "role": "user",
+        "content": question,
+    })
 
     result = agent.invoke(
         {"messages": messages},
         config={"callbacks": [langfuse_handler]},
     )
+
     final_message = result["messages"][-1]
     answer = _extract_text(final_message.content)
-    logger.info(f"[run_agent] content type was {type(final_message.content).__name__}, extracted {len(answer)} chars")
+
+    logger.info(
+        f"[run_agent] content type was "
+        f"{type(final_message.content).__name__}, "
+        f"extracted {len(answer)} chars"
+    )
 
     retrieval = get_retrieval_metadata()
-    logger.info(f"[run_agent] get_retrieval_metadata() after agent.invoke() returned: {retrieval is not None}")
+
+    logger.info(
+        f"[run_agent] get_retrieval_metadata() after agent.invoke() "
+        f"returned: {retrieval is not None}"
+    )
 
     return {
         "answer": answer,
         "retrieval": retrieval,
     }
-
 
 if __name__ == "__main__":
     from src.config.logging import setup_logging

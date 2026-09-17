@@ -6,6 +6,9 @@ class PlanState:
         task = self._get_task(task_id)
         task["status"] = "in_progress"
 
+    def update_plan(self, plan: dict):
+            self.tasks = plan["tasks"]
+
     def complete_task(self, task_id: int):
         task = self._get_task(task_id)
         task["status"] = "completed"
@@ -15,9 +18,13 @@ class PlanState:
         task["status"] = "failed"
 
     def get_plan(self) -> dict:
-        return {
-            "tasks": self.tasks
-        }
+        return {"tasks": self.tasks}
+
+    def get_pending_tasks(self) -> list[dict]:
+        return [
+            task for task in self.tasks
+            if task["status"] == "pending"
+        ]
 
     def _get_task(self, task_id: int) -> dict:
         for task in self.tasks:
