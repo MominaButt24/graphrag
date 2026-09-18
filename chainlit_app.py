@@ -1,5 +1,16 @@
+import wave
+import tempfile
+
+import uuid
+import os
 import chainlit as cl
 import chainlit.data as cl_data
+import asyncio
+import json
+import redis.asyncio as aioredis
+
+from src.voice.stt import transcribe_audio
+from src.voice.tts import synthesize_speech
 
 from src.chat.history import get_relevant_history, answer_query
 
@@ -88,11 +99,25 @@ async def on_chat_start():
         user_identifier
     )
 
+
+    # --------------------------------------------------------
+    # Voice audio buffer
+    # --------------------------------------------------------
+
+    cl.user_session.set(
+        "audio_buffer",
+        bytearray()
+    )
+
+    cl.user_session.set(
+        "audio_mime",
+        None
+    )
     # --------------------------------------------------------
     # NOTE:
     # Thread is intentionally NOT persisted here anymore.
     #
-    # The thread only gets created/titled in on_message,
+    # The thread only gets created/titled in ge,
     # when the user sends the first real message.
     # --------------------------------------------------------
 
@@ -104,9 +129,12 @@ async def on_chat_start():
     # button in the sidebar.
     # --------------------------------------------------------
 
+    
     await cl.Message(
         content="Hi! Ask me anything."
     ).send()
+
+    
 
 
 # ============================================================
@@ -193,57 +221,243 @@ def format_retrieval_explorer(
     return "\n".join(lines)
 
 
+
+#-------------- plan show streamimg ---------------
+def plan_channel(run_id: str) -> str:
+    return f"graphrag:plan:{run_id}"
+
+
+async def update_plan_message(plan_msg: cl.Message, content: str):
+    """Update a Chainlit message using the installed Chainlit API."""
+    plan_msg.content = content
+    await plan_msg.update()
+
+
+async def subscribe_plan_events(run_id: str, plan_msg: cl.Message):
+    redis_client = aioredis.from_url(
+        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+        decode_responses=True,
+    )
+
+    pubsub = redis_client.pubsub()
+
+    await pubsub.subscribe(plan_channel(run_id))
+
+    try:
+        async for message in pubsub.listen():
+
+            if message["type"] != "message":
+                continue
+
+            event = json.loads(message["data"])
+            event_type = event["type"]
+
+            if event_type == "plan_created":
+                tasks = event["plan"]["tasks"]
+
+                content = "### 📋 Plan\n\n"
+                content += "\n".join(
+                    f"⏳ {task['description']}"
+                    for task in tasks
+                )
+
+                await update_plan_message(plan_msg, content)
+
+            elif event_type == "task_started":
+                await update_plan_message(
+                    plan_msg,
+                    f"### 📋 Plan\n\n"
+                    f"🔄 **Task {event['task_id']}** — "
+                    f"{event['description']}"
+                )
+
+            elif event_type == "task_completed":
+                await update_plan_message(
+                    plan_msg,
+                    f"### 📋 Plan\n\n"
+                    f"✅ **Task {event['task_id']}** — "
+                    f"{event['description']}"
+                )
+
+            elif event_type == "plan_updated":
+                tasks = event["plan"]["tasks"]
+
+                content = "### 📋 Plan\n\n"
+
+                for task in tasks:
+                    if task["status"] == "completed":
+                        icon = "✅"
+                    elif task["status"] == "in_progress":
+                        icon = "🔄"
+                    elif task["status"] == "failed":
+                        icon = "❌"
+                    else:
+                        icon = "⏳"
+
+                    content += (
+                        f"{icon} **Task {task['id']}** — "
+                        f"{task['description']}\n"
+                    )
+
+                await update_plan_message(plan_msg, content)
+
+            elif event_type == "task_failed":
+                await update_plan_message(
+                    plan_msg,
+                    f"### 📋 Plan\n\n"
+                    f"❌ **Task {event['task_id']} failed** — "
+                    f"{event['description']}"
+                )
+
+            elif event_type == "finished":
+                tasks = event["plan"]["tasks"]
+
+                content = "### 📋 Plan\n\n"
+
+                for task in tasks:
+                    content += (
+                        f"✅ **Task {task['id']}** — "
+                        f"{task['description']}\n"
+                    )
+
+                await update_plan_message(plan_msg, content)
+
+                break
+
+    finally:
+        await pubsub.unsubscribe(plan_channel(run_id))
+        await pubsub.close()
+        await redis_client.close()
+
+
 # ============================================================
-# PER MESSAGE
+# VOICE INPUT
 # ============================================================
 
-@cl.on_message
-async def on_message(message: cl.Message):
+@cl.on_audio_start
+async def on_audio_start():
+    print("[VOICE] Audio recording started")
 
-    thread_id = cl.user_session.get("thread_id")
-    user_id = cl.user_session.get("user_id")
+    cl.user_session.set(
+        "audio_buffer",
+        bytearray()
+    )
 
-    # --------------------------------------------------------
-    # Documents shortcut
-    #
-    # The actual Documents screen is available through the
-    # persistent Documents button in the sidebar.
-    #
-    # /docs is kept as a convenience shortcut.
-    # --------------------------------------------------------
+    cl.user_session.set(
+        "audio_mime",
+        None
+    )
 
-    if message.content.strip().lower() == "/docs":
+    return True
 
-        await cl.Message(
-            content="📚 [Open Documents](/documents)"
-        ).send()
+@cl.on_audio_chunk
+async def on_audio_chunk(chunk: cl.InputAudioChunk):
 
+    audio_buffer = cl.user_session.get("audio_buffer")
+
+    if audio_buffer is None:
+        audio_buffer = bytearray()
+
+    # New recording
+    if chunk.isStart:
+        audio_buffer = bytearray()
+
+        cl.user_session.set(
+            "audio_mime",
+            chunk.mimeType
+        )
+
+        print(
+            f"[VOICE] Recording started | "
+            f"mime={chunk.mimeType}"
+        )
+
+    # Add this chunk's audio bytes
+    audio_buffer.extend(chunk.data)
+
+    cl.user_session.set(
+        "audio_buffer",
+        audio_buffer
+    )
+
+    print(
+        f"[VOICE] chunk received | "
+        f"elapsed={chunk.elapsedTime:.2f}s | "
+        f"bytes={len(chunk.data)} | "
+        f"total={len(audio_buffer)}"
+    )
+
+@cl.on_audio_end
+async def on_audio_end():
+
+    audio_buffer = cl.user_session.get("audio_buffer")
+
+    if not audio_buffer:
+        print("[VOICE] No audio received")
         return
 
-    # --------------------------------------------------------
-    # Document uploads are NOT handled here anymore.
-    #
-    # Uploading is now handled by:
-    #
-    # Documents UI
-    #      ↓
-    # FastAPI /api/v1/upload
-    #      ↓
-    # MinIO
-    #      ↓
-    # Redis queue
-    #      ↓
-    # Ingestion worker
-    #      ↓
-    # Milvus + Neo4j
-    #
-    # This prevents having two separate document-ingestion
-    # pipelines inside the application.
-    # --------------------------------------------------------
+    print(
+        f"[VOICE] Recording ended | "
+        f"total bytes={len(audio_buffer)}"
+    )
 
-    # --------------------------------------------------------
-    # Check whether this is the first real message
-    # --------------------------------------------------------
+    with tempfile.NamedTemporaryFile(
+        suffix=".wav",
+        delete=False,
+    ) as temp_file:
+
+        audio_path = temp_file.name
+
+    with wave.open(audio_path, "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(24000)
+        wav_file.writeframes(bytes(audio_buffer))
+
+    print(f"[VOICE] WAV saved: {audio_path}")
+
+    try:
+        transcript = await asyncio.to_thread(
+            transcribe_audio,
+            audio_path,
+        )
+
+        print(f"[VOICE] Transcript: {transcript}")
+
+        if not transcript.strip():
+            await cl.Message(
+                content="🎤 I couldn't detect any speech."
+            ).send()
+            return
+
+        await cl.Message(
+            content=transcript.strip(),
+            author="You",
+            type="user_message",
+        ).send()
+
+        cl.user_session.set(
+            "voice_query",
+            True
+        )
+
+        await process_query(
+            transcript.strip()
+        )
+
+    except Exception as exc:
+
+        print(f"[VOICE] STT error: {exc}")
+
+        await cl.Message(
+            content=f"❌ Voice transcription failed: {exc}"
+        ).send()
+    
+
+
+async def process_query(query: str):
+    thread_id = cl.user_session.get("thread_id")
+    user_id = cl.user_session.get("user_id")
 
     is_first_message = (
         len(
@@ -258,19 +472,10 @@ async def on_message(message: cl.Message):
         == 0
     )
 
-    # --------------------------------------------------------
-    # Update thread title
-    # --------------------------------------------------------
-
     if is_first_message:
-
         title = (
-            message.content[:60]
-            + (
-                "..."
-                if len(message.content) > 60
-                else ""
-            )
+            query[:60]
+            + ("..." if len(query) > 60 else "")
         )
 
         await cl_data.get_data_layer().update_thread(
@@ -279,48 +484,109 @@ async def on_message(message: cl.Message):
             user_id=user_id,
         )
 
-    # --------------------------------------------------------
-    # Generate answer
-    # --------------------------------------------------------
+    run_id = str(uuid.uuid4())
 
-    result = answer_query(
-        thread_id,
-        user_id,
-        message.content,
+    plan_msg = cl.Message(
+        content="### 📋 Plan\n\n⏳ Creating plan..."
     )
 
-    # --------------------------------------------------------
-    # Send answer
-    # --------------------------------------------------------
+    await plan_msg.send()
 
-    await cl.Message(
-        content=(
-            result["answer"]
-            + "\n\n"
-            + "📚 [View documents](/documents)"
+    subscriber_task = asyncio.create_task(
+        subscribe_plan_events(
+            run_id,
+            plan_msg,
         )
-    ).send()
+    )
 
-    # --------------------------------------------------------
-    # Retrieval Explorer
-    #
-    # Shows the actual retrieval cycle:
-    #
-    # vector candidates
-    # graph availability
-    # reranking
-    # final sources
-    # --------------------------------------------------------
+    try:
+        result = await asyncio.to_thread(
+            answer_query,
+            thread_id,
+            user_id,
+            query,
+            run_id,
+        )
+    finally:
+        subscriber_task.cancel()
+
+        try:
+            await subscriber_task
+        except asyncio.CancelledError:
+            pass
+
+    answer = result["answer"]
+
+    is_voice_query = cl.user_session.get(
+        "voice_query",
+        False,
+    )
+
+    if is_voice_query:
+
+        try:
+            audio_bytes = await asyncio.to_thread(
+                synthesize_speech,
+                answer,
+            )
+
+            await cl.Message(
+                content=answer,
+                elements=[
+                    cl.Audio(
+                        name="answer.mp3",
+                        content=audio_bytes,
+                        mime="audio/mpeg",
+                        display="inline",
+                        auto_play=True,
+                    )
+                ],
+            ).send()
+
+        except Exception as exc:
+
+            print(f"[VOICE] TTS error: {exc}")
+
+            # Even if TTS fails, don't lose the text answer.
+            await cl.Message(
+                content=answer
+            ).send()
+
+    else:
+
+        await cl.Message(
+            content=answer
+        ).send()
 
     explorer_content = format_retrieval_explorer(
         result.get("retrieval")
     )
 
     if explorer_content:
-
         await cl.Message(
             content=explorer_content
         ).send()
+
+# ============================================================
+# PER MESSAGE
+# ============================================================
+@cl.on_message
+async def on_message(message: cl.Message):
+
+    if message.content.strip().lower() == "/docs":
+        await cl.Message(
+            content="📚 [Open Documents](/documents)"
+        ).send()
+        return
+
+    cl.user_session.set(
+        "voice_query",
+        False
+    )
+
+    await process_query(
+        message.content.strip()
+    )
 
 
 # ============================================================
@@ -385,3 +651,4 @@ async def on_chat_resume(thread):
         "user_identifier",
         user_identifier
     )
+# ---------------------------

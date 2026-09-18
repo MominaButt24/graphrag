@@ -1,6 +1,7 @@
 import time
 import random
 
+from src.retrieval.query_enhancer import enhance_query
 from pymilvus import connections, utility, Collection, FieldSchema, CollectionSchema, DataType
 
 from src.config.settings import settings
@@ -9,9 +10,10 @@ from src.config.settings import settings
 # second copy of all-MiniLM-L6-v2 into memory.
 from src.storage.milvus_client import get_embedder
 from src.agent.plan_state import PlanState
-from src.agent.planner import create_plan
+from src.agent.planner import create_plan, replan
 from src.agent.execution_context import ExecutionContext
 from src.generation.llm import get_llm
+from src.queue.plan_events import publish_plan_event
 llm = get_llm()
 
 
@@ -99,7 +101,7 @@ def generate_answer(current_query: str, history: list[dict], retrieved_context: 
 from src.agent.agent import run_agent
 
 
-def answer_query(thread_id: str, user_id: str, query: str) -> str:
+def answer_query(thread_id: str, user_id: str, query: str, run_id: str) -> str:
     """Full turn: store user msg, pull history, run through the agent (tool
     routing + Tavily fallback + Langfuse tracing), store assistant msg."""
     store_turn(thread_id, user_id, "user", query)
@@ -109,18 +111,26 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
     # duplicated as both "history" and "question" when we call run_agent
     history = [h for h in history if h["content"] != query]
     history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
+    retrieval_query = enhance_query(query)
 #plan
     print("\n[PLANNER] Creating plan...")
 
     plan = create_plan(
-        query,
+        question=query,
+        retrieval_query=retrieval_query,
         history=history_messages,
     )
 
     plan_state = PlanState(plan)
+    publish_plan_event(
+        run_id,
+        "plan_created",
+        plan=plan_state.get_plan(),
+    )
 
     execution_context = ExecutionContext(
-        user_question=query
+        user_question=query,
+        retrieval_query=retrieval_query,
     )
     print("[PLANNER] Plan created:")
     for task in plan_state.get_plan()["tasks"]:
@@ -144,6 +154,13 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
         task_id = task["id"]
 
         plan_state.start_task(task_id)
+        #publishing the task_started event to the queue so that the frontend can update the UI
+        publish_plan_event(
+            run_id,
+            "task_started",
+            task_id=task_id,
+            description=task["description"],
+        )
 
         print(
             f"[PLAN] Task {task_id} started: "
@@ -155,6 +172,7 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
                 task["description"],
                 history=history_messages,
                 execution_context=execution_context.get_context(),
+                retrieval_query=retrieval_query,
             )
 
             execution_context.add_result(
@@ -164,11 +182,52 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
             )
 
             plan_state.complete_task(task_id)
+            publish_plan_event(
+                run_id,
+                "task_completed",
+                task_id=task_id,
+                description=task["description"],
+            )
 
             print(f"[PLAN] Task {task_id} completed.")
 
-        except Exception:
+            updated_plan = replan(
+                question=query,
+                current_plan=plan_state.get_plan(),
+                execution_context=execution_context.get_context(),
+                history=history_messages,
+            )
+            plan_state.update_plan(updated_plan)
+            #publish after replaning
+            publish_plan_event(
+                run_id,
+                "plan_updated",
+                plan=plan_state.get_plan(),
+            )
+
+            print("[REPLAN] Plan updated:")
+            for updated_task in plan_state.get_plan()["tasks"]:
+                print(
+                    f"  {updated_task['id']}. "
+                    f"{updated_task['description']} "
+                    f"[{updated_task['status']}]"
+                )
+
+        # except Exception:
+        #     plan_state.fail_task(task_id)
+
+        #     print(f"[PLAN] Task {task_id} failed.")
+        #     raise
+        except Exception as exc:
             plan_state.fail_task(task_id)
+
+            publish_plan_event(
+                run_id,
+                "task_failed",
+                task_id=task_id,
+                description=task["description"],
+                error=str(exc),
+            )
 
             print(f"[PLAN] Task {task_id} failed.")
             raise
@@ -184,10 +243,18 @@ def answer_query(thread_id: str, user_id: str, query: str) -> str:
     logger.info(f"[chat_history_client][answer_query] FINAL retrieval being returned to Chainlit: {retrieval is not None}")
 
     store_turn(thread_id, user_id, "assistant", answer)
+
+    #loop complete publish evnt
+    publish_plan_event(
+        run_id,
+        "finished",
+        plan=plan_state.get_plan(),
+    )
     return {
         "answer": answer,
         "retrieval": retrieval,
-        "plan": plan,
+        # "plan": plan,
+        "plan": plan_state.get_plan(),
     }
 
 

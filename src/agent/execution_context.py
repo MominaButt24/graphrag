@@ -7,8 +7,9 @@ class ExecutionContext:
     - previous task results
     """
 
-    def __init__(self, user_question: str):
+    def __init__(self, user_question: str, retrieval_query: str):
         self.user_question = user_question
+        self.retrieval_query = retrieval_query
         self.task_results: list[dict] = []
 
     def add_result(
@@ -29,7 +30,10 @@ class ExecutionContext:
             return ""
 
         parts = [
-            "RESULTS FROM PREVIOUS PLAN TASKS:"
+            "CANONICAL RETRIEVAL QUERY:",
+            self.retrieval_query,
+            "",
+            "RESULTS FROM PREVIOUS PLAN TASKS:",
         ]
 
         for item in self.task_results:

@@ -11,6 +11,7 @@ from langchain_tavily import TavilySearch
 from langchain.agents import create_agent
 
 from langfuse.langchain import CallbackHandler
+from contextvars import ContextVar
 
 from src.retrieval.hybrid import hybrid_answer
 from src.retrieval.relevance import get_retrieval_metadata
@@ -27,6 +28,11 @@ langfuse_handler = CallbackHandler()
 
 RELEVANCE_THRESHOLD = 0.25
 
+current_retrieval_query: ContextVar[str | None] = ContextVar(
+    "current_retrieval_query",
+    default=None,
+)
+
 
 @tool
 def hybrid_knowledge_base(question: str) -> str:
@@ -37,11 +43,15 @@ def hybrid_knowledge_base(question: str) -> str:
     to the full search, so it works regardless of what topics have been
     uploaded and self-reports when nothing relevant is found.
     """
-    score = kb_relevance_score(question)
+    retrieval_query = current_retrieval_query.get() or question
+    score = kb_relevance_score(retrieval_query)
     logger.info(f"[hybrid_knowledge_base] relevance score: {score:.3f}")
     if score < RELEVANCE_THRESHOLD:
         return "No relevant information found in the knowledge base for this question."
-    result = hybrid_answer(question)
+    result = hybrid_answer(
+        question=question,
+        retrieval_question=retrieval_query,
+    )
     logger.info(f"[hybrid_knowledge_base] hybrid_answer() returned, checking metadata immediately: {get_retrieval_metadata() is not None}")
     return result
 
@@ -119,6 +129,7 @@ def run_agent(
     question: str,
     history: list[dict] | None = None,
     execution_context: str | None = None,
+    retrieval_query: str | None = None,
 ) -> dict:
 
     messages = list(history or [])
@@ -135,15 +146,28 @@ Current task:
 Use the previous task results above when performing the current task.
 """
 
-    messages.append({
-        "role": "user",
-        "content": question,
-    })
+    if retrieval_query:
+        question = f"""
+Original task:
+{question}
 
-    result = agent.invoke(
-        {"messages": messages},
-        config={"callbacks": [langfuse_handler]},
-    )
+Canonical retrieval query:
+{retrieval_query}
+
+Use the canonical retrieval query when the knowledge-base tool is called.
+You may still choose the appropriate tool and decide how to answer.
+"""
+
+    messages.append({"role": "user", "content": question})
+
+    query_token = current_retrieval_query.set(retrieval_query)
+    try:
+        result = agent.invoke(
+            {"messages": messages},
+            config={"callbacks": [langfuse_handler]},
+        )
+    finally:
+        current_retrieval_query.reset(query_token)
 
     final_message = result["messages"][-1]
     answer = _extract_text(final_message.content)

@@ -75,6 +75,7 @@ Rules:
 
 def create_plan(
     question: str,
+    retrieval_query: str | None = None,
     history: list[dict] | None = None,
 ) -> dict:
 
@@ -91,11 +92,20 @@ def create_plan(
                 )
             )
 
-    messages.append(
-        HumanMessage(
-            content=question
-        )
-    )
+    planning_input = question
+    if retrieval_query:
+        planning_input = f"""
+Original user request:
+{question}
+
+Canonical retrieval query:
+{retrieval_query}
+
+Create tasks that preserve the original request while using the canonical
+retrieval query when a task needs knowledge-base information.
+"""
+
+    messages.append(HumanMessage(content=planning_input))
 
     response = get_planner_llm().invoke(messages)
 

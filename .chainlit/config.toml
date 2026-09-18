@@ -50,6 +50,7 @@ allow_thread_sharing = false
 # Enable favorite messages
 favorites = false
 
+
 [features.slack]
 # Add emoji reaction when message is received (requires reactions:write OAuth scope)
 reaction_on_message_received = false
@@ -72,7 +73,7 @@ reaction_on_message_received = false
 
 [features.audio]
     # Enable audio features
-    enabled = false
+    enabled = true
     # Sample rate of the audio
     sample_rate = 24000
 
