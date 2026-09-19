@@ -1,5 +1,6 @@
 import wave
 import tempfile
+import re
 
 import uuid
 import os
@@ -334,6 +335,88 @@ async def subscribe_plan_events(run_id: str, plan_msg: cl.Message):
 # VOICE INPUT
 # ============================================================
 
+def clean_for_tts(text: str) -> str:
+    """Convert Markdown-formatted answer into natural speech text."""
+
+    # Remove fenced code blocks completely
+    text = re.sub(
+        r"```.*?```",
+        "",
+        text,
+        flags=re.DOTALL,
+    )
+
+    # Markdown headings
+    text = re.sub(
+        r"^#{1,6}\s*",
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+
+    # Bold
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+
+    # Italic
+    text = re.sub(r"\*(.*?)\*", r"\1", text)
+
+    # Underscore bold / italic
+    text = re.sub(r"__(.*?)__", r"\1", text)
+    text = re.sub(r"_(.*?)_", r"\1", text)
+
+    # Bullet points
+    text = re.sub(
+        r"^\s*[-*+]\s+",
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+
+    # Numbered lists
+    text = re.sub(
+        r"^\s*\d+\.\s+",
+        "",
+        text,
+        flags=re.MULTILINE,
+    )
+
+    # Markdown links: [text](url) → text
+    text = re.sub(
+        r"\[([^\]]+)\]\([^)]+\)",
+        r"\1",
+        text,
+    )
+
+    # Inline code
+    text = re.sub(
+        r"`([^`]+)`",
+        r"\1",
+        text,
+    )
+
+    # Remove remaining Markdown formatting characters
+    text = re.sub(
+        r"[#*_~]",
+        "",
+        text,
+    )
+
+    # Clean excessive whitespace
+    text = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        text,
+    )
+
+    text = re.sub(
+        r"[ \t]+",
+        " ",
+        text,
+    )
+
+    return text.strip()
+
+
 @cl.on_audio_start
 async def on_audio_start():
     print("[VOICE] Audio recording started")
@@ -525,9 +608,13 @@ async def process_query(query: str):
     if is_voice_query:
 
         try:
+            tts_text = clean_for_tts(answer)
+
+            print(f"[VOICE] TTS text: {tts_text}")
+
             audio_bytes = await asyncio.to_thread(
                 synthesize_speech,
-                answer,
+                tts_text,
             )
 
             await cl.Message(
