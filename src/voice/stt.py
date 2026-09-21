@@ -19,12 +19,8 @@ DEEPGRAM_STT_URL = "https://api.deepgram.com/v1/listen"
 def transcribe_audio(audio_path: str | Path) -> str:
     """
     Transcribe an audio file using Deepgram Nova-3.
-
-    Args:
-        audio_path: Path to the audio file.
-
-    Returns:
-        Transcribed text.
+    Args:audio_path: Path to the audio file.
+    Returns:Transcribed text.
     """
 
     audio_path = Path(audio_path)

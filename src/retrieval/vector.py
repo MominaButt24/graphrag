@@ -10,7 +10,7 @@ llm = get_llm()
 
 
 def vector_search(question: str, top_k: int = 5) -> list[dict]:
-    """Milvus similarity search — the vector-side counterpart to smart_query."""
+    """Milvus similarity search,the vector-side counterpart to smart_query."""
     span = sentry_sdk.get_current_span()
 
     collection = get_collection()

@@ -7,9 +7,6 @@ llm = get_llm()
 
 def enhance_query(question: str) -> str:
 	"""Rewrite a user question into a focused retrieval query.
-
-	Retrieval stays available when the enhancer fails: the original question
-	is returned instead of turning query enhancement into a hard dependency.
 	"""
 	question = question.strip()
 	if not question:

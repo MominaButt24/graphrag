@@ -1,4 +1,3 @@
-# -----------------------
 import time
 import uuid as uuid_lib
 
@@ -26,8 +25,6 @@ THREADS_COLLECTION = "chat_threads"
 USERS_COLLECTION = "chat_users"
 DOCUMENTS_COLLECTION = "chat_documents"
 
-# Dummy vector dimension.
-# These collections are being used mainly for metadata storage.
 DIM_PLACEHOLDER = 8
 
 
@@ -35,10 +32,7 @@ _threads_collection = None
 _users_collection = None
 _documents_collection = None
 
-# In-memory store for CustomElement props — see the ELEMENTS section on
-# MilvusDataLayer below for why this exists (create_element/get_element
-# were previously no-op stubs, which is almost certainly why props never
-# reached the frontend).
+
 _elements_store: dict = {}
 
 
@@ -92,7 +86,7 @@ def start_document(doc_id: str, filename: str, uploaded_by: str) -> int:
 
 
 def finish_document(doc_id: str, filename: str, uploaded_by: str, uploaded_at: int, chunk_count: int, status: str = "done"):
-    """Call once ingestion completes — same id, so this upserts in place rather than duplicating."""
+    """Call once ingestion completes, same id, so this upserts in place rather than duplicating."""
     collection = get_documents_collection()
     collection.upsert([{
         "id": doc_id,
@@ -347,9 +341,6 @@ def get_user_identifier_by_id(user_id: str) -> str:
 
     This is needed because Chainlit's authorization check
     uses the user's identifier.
-
-    Also supports your old data where user_id was stored
-    directly as "momna".
     """
 
     if not user_id:
@@ -374,17 +365,6 @@ def get_user_identifier_by_id(user_id: str) -> str:
     if rows:
         return rows[0]["identifier"]
 
-    # --------------------------------------------------------
-    # BACKWARD COMPATIBILITY
-    #
-    # Older threads may have:
-    #
-    # user_id = "momna"
-    #
-    # instead of:
-    #
-    # user_id = "3d6a028f-..."
-    # --------------------------------------------------------
 
     rows = collection.query(
         expr=f'identifier == "{user_id}"',
@@ -703,14 +683,7 @@ class MilvusDataLayer(cl_data.BaseDataLayer):
 
         # ----------------------------------------------------
         # Store thread
-        #
-        # IMPORTANT:
-        #
         # user_id = persisted UUID
-        #
-        # NOT:
-        #
-        # user_id = "momna"
         # ----------------------------------------------------
 
         row = {
@@ -919,16 +892,6 @@ class MilvusDataLayer(cl_data.BaseDataLayer):
     # ========================================================
     # ELEMENTS
     # ========================================================
-    # Chainlit round-trips CustomElement props through create_element()/
-    # get_element() — even for elements attached inline in the current
-    # message, not just ones surviving a page reload. These were
-    # previously no-op stubs, which silently dropped every element's
-    # props: create_element() never stored them, so get_element() had
-    # nothing to return. That's the most likely reason props never
-    # reached the frontend despite the backend computing them correctly.
-    # A plain in-memory dict is enough here — elements are ephemeral UI
-    # artifacts for the running session, not something that needs to
-    # survive an app restart the way threads/messages do.
 
     def _serialize_element(self, element) -> dict:
         if hasattr(element, "to_dict"):
@@ -936,8 +899,6 @@ class MilvusDataLayer(cl_data.BaseDataLayer):
                 return element.to_dict()
             except Exception:
                 pass
-        # Fallback if to_dict() isn't available in this Chainlit version —
-        # pull the known attributes manually instead of guessing further.
         return {
             "id": getattr(element, "id", None),
             "threadId": getattr(element, "thread_id", None) or getattr(element, "threadId", None),

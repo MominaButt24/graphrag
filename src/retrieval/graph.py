@@ -146,7 +146,7 @@ def global_search(question: str):
 
 
 def smart_query(question: str) -> str:
-    """Single entry point — decides local vs global automatically."""
+    """Single entry point: decides local vs global automatically."""
     query_type = classify_query(question)
     logger.info(f"[router] classified as: {query_type}")
 

@@ -24,7 +24,7 @@ def query(payload: Query):
 
 @router.post("/query/hybrid")
 def query_hybrid(payload: Query):
-    """Phase 1 + 2: graph + vector search in parallel, reranked, one synthesized answer."""
+    """graph + vector search in parallel, reranked, one synthesized answer."""
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="question cannot be empty")
     return {"answer": query_hybrid(payload.question)}
@@ -32,7 +32,7 @@ def query_hybrid(payload: Query):
 
 @router.post("/query/agent")
 def query_agent(payload: Query):
-    """Phase 3: agent decides between the hybrid KB tool and Tavily, traced via Langfuse."""
+    """agent decides between the hybrid KB tool and Tavily, traced via Langfuse."""
     if not payload.question.strip():
         raise HTTPException(status_code=400, detail="question cannot be empty")
     return {"answer": query_agent(payload.question)}

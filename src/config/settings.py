@@ -10,7 +10,7 @@ load_dotenv()
 class Settings:
     """Central environment-backed settings object.
 
-    Keep this file as the single location that reads the runtime
+    the single location that reads the runtime
     environment so every other module imports configuration from here.
     """
 

@@ -28,6 +28,6 @@ def get_llm():
 
 
 def reset_llm():
-    """Optional helper for tests or process restarts."""
+    """helper for tests or process restarts."""
     global _llm
     _llm = None

@@ -20,8 +20,7 @@ llm = get_llm()
 COLLECTION_NAME = "chat_history"
 EMBED_DIM = 384
 
-_collection = None  # module-level singleton, mirrors _driver in neo4j_client.py
-
+_collection = None  
 
 def get_chat_history_collection():
     global _collection
@@ -62,8 +61,6 @@ def close_collection():
     _collection = None
 
 
-# ---------- Real LLM — now that access is back ----------
-
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 
@@ -86,8 +83,6 @@ def build_messages(history: list[dict], current_query: str, retrieved_context: s
 
 from langfuse.langchain import CallbackHandler
 
-# Reads LANGFUSE_SECRET_KEY / LANGFUSE_PUBLIC_KEY / LANGFUSE_BASE_URL from
-# .env automatically — same pattern as src/agent.py
 langfuse_handler = CallbackHandler()
 
 
@@ -213,11 +208,6 @@ def answer_query(thread_id: str, user_id: str, query: str, run_id: str) -> str:
                     f"[{updated_task['status']}]"
                 )
 
-        # except Exception:
-        #     plan_state.fail_task(task_id)
-
-        #     print(f"[PLAN] Task {task_id} failed.")
-        #     raise
         except Exception as exc:
             plan_state.fail_task(task_id)
 
@@ -316,7 +306,7 @@ def get_relevant_history(thread_id: str, user_id: str, current_query: str, recen
         )
         relevant_hits = [hit.entity.to_dict() for hit in relevant[0]]
 
-    # Dedupe — a message pulled in by both recency and relevance shouldn't appear twice
+    # Dedupe: a message pulled in by both recency and relevance shouldn't appear twice
     seen = set()
     merged = []
     for r in recent + relevant_hits:
@@ -342,7 +332,7 @@ def list_user_threads(user_id: str):
     return threads
 
 
-# ---------- Quick manual test with dummy data (run this tonight) ----------
+# ---------- manual test with dummy data  ----------
 
 if __name__ == "__main__":
     collection = get_chat_history_collection()

@@ -114,22 +114,6 @@ async def on_chat_start():
         "audio_mime",
         None
     )
-    # --------------------------------------------------------
-    # NOTE:
-    # Thread is intentionally NOT persisted here anymore.
-    #
-    # The thread only gets created/titled in ge,
-    # when the user sends the first real message.
-    # --------------------------------------------------------
-
-    # --------------------------------------------------------
-    # Initial chat message
-    #
-    # Documents are no longer displayed here.
-    # They are available through the persistent Documents
-    # button in the sidebar.
-    # --------------------------------------------------------
-
     
     await cl.Message(
         content="Hi! Ask me anything."
@@ -147,8 +131,7 @@ def format_retrieval_explorer(
 ) -> str | None:
     """
     Builds the Retrieval Explorer display from the metadata
-    captured by retrieval.py / hybrid_answer().
-
+    captured by retrieva.
     Returns a message explaining that no KB retrieval ran
     when this turn did not use the hybrid retrieval pipeline.
     """
@@ -738,4 +721,3 @@ async def on_chat_resume(thread):
         "user_identifier",
         user_identifier
     )
-# ---------------------------

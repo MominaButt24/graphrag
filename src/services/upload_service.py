@@ -23,7 +23,7 @@ def upload_documents(files: list[UploadFile]):
 
     results = []
     os.makedirs("data/raw", exist_ok=True)
-    
+
     for file in files:
 
         extension = os.path.splitext( file.filename )[1].lower() 
@@ -33,7 +33,6 @@ def upload_documents(files: list[UploadFile]):
         doc_id = str(uuid.uuid4())
         uploaded_by = "api-upload"
 
-        # Avoid filename collisions.
         save_path = os.path.join(
             "data/raw",
             f"{doc_id}_{file.filename}",

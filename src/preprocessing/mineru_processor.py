@@ -27,7 +27,6 @@ def run_mineru(
 ) -> Path:
     """
     Run MinerU for a single PDF page.
-
     page_number is 1-based because MinerU's --pages argument
     uses PDF page numbering.
     """
@@ -93,7 +92,6 @@ def decode_embedded_images(markdown: str):
 def clean_mineru_markdown(markdown: str) -> str:
     """
     Remove embedded Base64 images from MinerU Markdown.
-
     Image positions are preserved using [IMAGE_N] markers.
     """
     cleaned_markdown, image_count = decode_embedded_images(
@@ -111,13 +109,9 @@ def clean_mineru_markdown(markdown: str) -> str:
 def mineru_to_documents(filepath: str):
     """
     Process a PDF page-by-page with MinerU.
-
     Returns:
-        documents:
-            One LangChain Document per PDF page.
-
-        combined_markdown:
-            Complete cleaned Markdown document for storage
+        documents:One LangChain Document per PDF page.
+        combined_markdown:Complete cleaned Markdown document for storage
             in MinIO and future View functionality.
     """
 

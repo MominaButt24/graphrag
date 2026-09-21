@@ -15,7 +15,7 @@ class PlanState:
 
         self.tasks = plan["tasks"]
 
-        # The planner may accidentally omit or reset a completed task. Keep
+        # The planner may accidentally omit or reset a completed task. Keeping
         # runtime execution state authoritative over the LLM's plan output.
         for task in self.tasks:
             if task["id"] in completed_task_ids:

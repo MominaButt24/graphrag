@@ -18,7 +18,6 @@ def query_graph(question: str):
 def query_hybrid(question: str):
     logger.info(f"[/query/hybrid] question='{question}'")
     try:
-        # return hybrid_answer(question)
         retrieval_query = enhance_query(question)
 
         return hybrid_answer(
@@ -32,7 +31,6 @@ def query_hybrid(question: str):
 def query_agent(question: str):
     logger.info(f"[/query/agent] question='{question}'")
     try:
-        # return run_agent(question)
         retrieval_query = enhance_query(question)
 
         return run_agent(

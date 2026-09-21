@@ -7,7 +7,6 @@ from src.retrieval.graph import smart_query
 from src.retrieval.vector import vector_search
 from src.retrieval.reranker import rerank_and_merge
 from src.retrieval.relevance import _set_retrieval_metadata
-# from src.retrieval.query_enhancer import enhance_query
 
 logger = get_logger(__name__)
 
@@ -49,7 +48,6 @@ def hybrid_search(question: str, vector_top_k: int = 5) -> dict:
 
 
 def hybrid_answer(question: str, retrieval_question: str | None = None, vector_top_k=5, rerank_top_k=5):
-    # retrieval_question = enhance_query(question)
     retrieval_question = retrieval_question or question
     logger.info(
         f"[hybrid_answer] original_question='{question}' "

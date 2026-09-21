@@ -55,53 +55,6 @@ def process_ingestion_job(job: dict):
             local_path=temp_path,
         )
 
-        # # ---------------------------------------------
-        # # 2.1. MinerU preprocessing
-        # # ---------------------------------------------
-
-        # docs, processed_markdown = mineru_to_documents(
-        #     temp_path
-        # )
-
-        # # ---------------------------------------------
-        # # 2.2. Store processed Markdown in MinIO
-        # # ---------------------------------------------
-
-        # processed_md_path = os.path.join(
-        #     temp_dir,
-        #     f"{os.path.splitext(filename)[0]}.md",
-        # )
-
-        # with open(
-        #     processed_md_path,
-        #     "w",
-        #     encoding="utf-8",
-        # ) as f:
-        #     f.write(processed_markdown)
-
-        # processed_key = upload_processed_markdown(
-        #     local_path=processed_md_path,
-        #     document_id=document_id,
-        #     filename=filename,
-        # )
-
-        # logger.info(
-        #     f"[worker] uploaded processed Markdown: "
-        #     f"{processed_key}"
-        # )
-
-        # # ---------------------------------------------
-        # # 2.3. Chunk MinerU documents
-        # # ---------------------------------------------
-
-        # chunks = chunk_documents(docs)
-
-        # logger.info(
-        #     f"[worker] {filename}: "
-        #     f"{len(docs)} pages -> "
-        #     f"{len(chunks)} chunks"
-        # )
-
 
         # ---------------------------------------------
         # 2.1. Preprocessing

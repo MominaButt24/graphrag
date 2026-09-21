@@ -29,12 +29,10 @@ def rerank_and_merge(
 ) -> list[dict]:
     """
     Reranks graph and vector candidates using a CrossEncoder.
-
     Each candidate gets:
     - original_rank
     - rerank_score
     - final_rank
-
     The original vector similarity score is preserved.
     """
 

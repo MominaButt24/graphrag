@@ -4,25 +4,6 @@ from src.preprocessing.mineru_processor import mineru_to_documents
 from src.preprocessing.document_processor import process_document
 from src.storage.milvus_client import get_collection, get_embedder
 
-# def load_and_chunk(
-#     filepath: str,
-#     chunk_size: int = 800,
-#     chunk_overlap: int = 100,
-# ):
-#     """
-#     MinerU preprocesses the PDF page-by-page.
-
-#     Each page remains a separate Document so that page
-#     metadata survives chunking for Milvus and future citations.
-#     """
-#     docs, _ = mineru_to_documents(filepath)
-
-#     return chunk_documents(
-#         docs,
-#         chunk_size=chunk_size,
-#         chunk_overlap=chunk_overlap,
-#     )
-
 
 def load_and_chunk(
     filepath: str,
@@ -32,14 +13,9 @@ def load_and_chunk(
     """
     Prepare a supported document and split it into chunks.
 
-    PDF:
-        Processed page-by-page with MinerU.
-
-    DOCX:
-        Converted to PDF, then processed page-by-page with MinerU.
-
-    PPTX/XLSX:
-        Extracted directly into LangChain Documents.
+    PDF:processed page-by-page with MinerU.
+    DOCX:Converted to PDF, then processed page-by-page with MinerU.
+    PPTX/XLSX:extracted directly into LangChain Documents.
     """
 
     processed = process_document(filepath)
@@ -87,29 +63,6 @@ def chunk_documents(
     )
 
     return chunks
-
-# --- Phase 1: Milvus ingestion additions below ---
-# load_and_chunk above is untouched — this reuses its output, it doesn't
-# replace or touch whatever function feeds chunks into LLMGraphTransformer
-# for the graph side. Call this as a separate, additive step.
-
-# def embed_and_ingest(chunks, source: str):
-#     """
-#     Embeds chunk texts and inserts them into Milvus.
-#     Call this with the same chunks you already feed to graph_builder.py —
-#     same source documents, second storage backend, nothing shared or
-#     overwritten.
-#     """
-#     collection = get_collection()
-#     embedder = get_embedder()
-
-#     texts = [c.page_content for c in chunks]
-#     embeddings = embedder.encode(texts, show_progress_bar=True).tolist()
-#     sources = [source] * len(texts)
-
-#     collection.insert([texts, sources, embeddings])
-#     collection.flush()
-#     print(f"[ingest] {source}: inserted {len(texts)} chunks into Milvus")
 
 def embed_and_ingest(
     chunks,

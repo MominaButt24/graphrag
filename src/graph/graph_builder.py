@@ -6,10 +6,6 @@ from src.generation.llm import get_llm
 
 llm = get_llm()
 
-# llm = ChatGroq(model="llama-3.3-70b-versatile", temperature=0)
-
-
-# transformer = LLMGraphTransformer(llm=llm)
 transformer = LLMGraphTransformer(
     llm=llm,
     ignore_tool_usage=True,
@@ -32,7 +28,7 @@ def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 
             node_count = sum(len(gd.nodes) for gd in graph_documents)
             rel_count = sum(len(gd.relationships) for gd in graph_documents)
 
-            # A graph extraction with zero nodes and zero relationships is not
+            # a graph extraction with zero nodes and zero relationships is not
             # a successful extraction. Surface it as a chunk failure so callers
             # can stop the upload metadata lifecycle from reporting "done".
             if node_count == 0 and rel_count == 0:
@@ -55,7 +51,7 @@ def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 
             print(f"[{i+1}/{len(chunks)}] FAILED: {e}")
             failed_chunks.append((i, chunk, str(e)))
 
-        # rate limiting — avoid hammering Groq and tripping limits
+        # rate limiting — avoid hammering tripping limits
         if (i + 1) % batch_size == 0:
             time.sleep(delay_seconds)
 

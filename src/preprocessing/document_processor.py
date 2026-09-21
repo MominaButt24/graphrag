@@ -9,9 +9,7 @@ from langchain_core.documents import Document
 def process_docx(file_path: str) -> str:
     """
     Convert DOCX to PDF.
-
-    Returns:
-        Path to the generated PDF.
+    Returns:Path to the generated PDF.
     """
 
     output_dir = os.path.dirname(file_path) or "."
@@ -48,7 +46,6 @@ def process_docx(file_path: str) -> str:
 def process_pptx(file_path: str) -> list[Document]:
     """
     Extract text, tables, and speaker notes from PPTX.
-
     One Document is created per slide.
     """
 
@@ -123,7 +120,6 @@ def process_pptx(file_path: str) -> list[Document]:
 def process_xlsx(file_path: str) -> list[Document]:
     """
     Extract content from an Excel workbook.
-
     One or more Documents may be created per sheet/table
     depending on what Unstructured extracts.
     """
@@ -171,17 +167,10 @@ def process_document(file_path: str) -> dict:
     """
     Detect the file type and prepare it for ingestion.
 
-    PDF:
-        Process later with MinerU.
-
-    DOCX:
-        Convert to PDF, then process the PDF with MinerU.
-
-    PPTX:
-        Extract directly into LangChain Documents.
-
-    XLSX:
-        Extract directly into LangChain Documents.
+    PDF:Process later with MinerU.
+    DOCX:Convert to PDF, then process the PDF with MinerU.
+    PPTX:Extract directly into LangChain Documents.
+    XLSX:Extract directly into LangChain Documents.
     """
 
     extension = os.path.splitext(

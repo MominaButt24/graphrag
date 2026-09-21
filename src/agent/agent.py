@@ -1,9 +1,9 @@
 """
-Phase 3: agent + tool routing, sitting above the Phase 1+2 hybrid
+agent + tool routing, sitting above the hybrid
 retrieval pipeline. Two tools: the hybrid knowledge base (GraphRAG +
 Milvus, reranked) and Tavily web search. The system prompt tries the
 knowledge base first and only reaches for Tavily when it comes back
-empty or insufficient — this is "not in the graph" turning into a real
+empty or insufficient this is "not in the graph" turning into a real
 fallback instead of a dead end.
 """
 from langchain_core.tools import tool

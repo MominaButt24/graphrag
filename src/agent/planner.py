@@ -1,7 +1,5 @@
 import json
-
 from langchain_core.messages import SystemMessage, HumanMessage
-
 from src.generation.llm import get_llm
 
 
@@ -83,7 +81,6 @@ def create_plan(
         SystemMessage(content=PLANNER_SYSTEM_PROMPT),
     ]
 
-    # Optional conversation context
     if history:
         for turn in history[-6:]:
             messages.append(

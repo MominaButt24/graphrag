@@ -12,7 +12,7 @@ llm = get_llm()
 COLLECTION_NAME = "chat_history"
 EMBED_DIM = 384
 
-_collection = None  # module-level singleton, mirrors _driver in neo4j_client.py
+_collection = None 
 
 
 def get_chat_history_collection():
@@ -119,7 +119,7 @@ def get_relevant_history(thread_id: str, current_query: str, recent_k=3, relevan
     )
     recent = sorted(recent, key=lambda r: r["timestamp"])[-recent_k * 2:]
 
-    # Semantically relevant older turns — vector search, scoped to this thread only
+    # Semantically relevant older turns  vector search, scoped to this thread only
     query_embedding = get_embedder().encode(current_query).tolist()
     relevant = collection.search(
         data=[query_embedding],

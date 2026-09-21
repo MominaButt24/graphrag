@@ -6,7 +6,7 @@ from src.config.settings import settings
 COLLECTION_NAME = "graphrag_documents"
 EMBED_DIM = 384
 
-_collection = None  # module-level singleton, mirrors _driver in neo4j_client.py
+_collection = None  
 _embedder = None
 
 
@@ -28,12 +28,6 @@ def get_collection():
         if utility.has_collection(COLLECTION_NAME):
             _collection = Collection(COLLECTION_NAME)
         else:
-            # fields = [
-            #     FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-            #     FieldSchema(name="text", dtype=DataType.VARCHAR, max_length=8192),
-            #     FieldSchema(name="source", dtype=DataType.VARCHAR, max_length=512),
-            #     FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=EMBED_DIM),
-            # ]
             fields = [
                 FieldSchema(
                     name="id",
