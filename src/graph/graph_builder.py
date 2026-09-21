@@ -41,6 +41,11 @@ def build_graph_from_chunks(chunks, batch_size: int = 5, delay_seconds: float = 
                     "— graph conversion produced an empty graph for this chunk"
                 )
                 print(message)
+
+                print(
+                    f"[DEBUG] chunk {i+1} text:\n"
+                    f"{chunk.page_content[:1000]}\n"
+                )
                 failed_chunks.append((i, chunk, message))
                 continue
 

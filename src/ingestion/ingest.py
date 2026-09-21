@@ -1,19 +1,92 @@
+import os
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import PyPDFLoader  # swap per file type
+from src.preprocessing.mineru_processor import mineru_to_documents
+from src.preprocessing.document_processor import process_document
 from src.storage.milvus_client import get_collection, get_embedder
 
-def load_and_chunk(filepath: str, chunk_size: int = 800, chunk_overlap: int = 100):
-    loader = PyPDFLoader(filepath)
-    docs = loader.load()
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=chunk_size,      # smaller than your vanilla RAG chunk size on purpose
+# def load_and_chunk(
+#     filepath: str,
+#     chunk_size: int = 800,
+#     chunk_overlap: int = 100,
+# ):
+#     """
+#     MinerU preprocesses the PDF page-by-page.
+
+#     Each page remains a separate Document so that page
+#     metadata survives chunking for Milvus and future citations.
+#     """
+#     docs, _ = mineru_to_documents(filepath)
+
+#     return chunk_documents(
+#         docs,
+#         chunk_size=chunk_size,
+#         chunk_overlap=chunk_overlap,
+#     )
+
+
+def load_and_chunk(
+    filepath: str,
+    chunk_size: int = 800,
+    chunk_overlap: int = 100,
+):
+    """
+    Prepare a supported document and split it into chunks.
+
+    PDF:
+        Processed page-by-page with MinerU.
+
+    DOCX:
+        Converted to PDF, then processed page-by-page with MinerU.
+
+    PPTX/XLSX:
+        Extracted directly into LangChain Documents.
+    """
+
+    processed = process_document(filepath)
+
+    if processed["type"] == "mineru":
+        docs, _ = mineru_to_documents(
+            processed["path"]
+        )
+
+        # Remove the temporary DOCX-generated PDF.
+        if processed["temporary_pdf"]:
+            try:
+                os.remove(processed["path"])
+            except OSError:
+                pass
+
+    else:
+        docs = processed["documents"]
+
+    return chunk_documents(
+        docs,
+        chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
     )
+
+def chunk_documents(
+    docs,
+    chunk_size: int = 800,
+    chunk_overlap: int = 100,
+):
+    """
+    Split already-processed page Documents into chunks.
+    """
+
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
+
     chunks = splitter.split_documents(docs)
 
-    print(f"{filepath}: {len(docs)} pages -> {len(chunks)} extraction-ready chunks")
-    return chunks
+    print(
+        f"{len(docs)} pages -> "
+        f"{len(chunks)} extraction-ready chunks"
+    )
 
+    return chunks
 
 # --- Phase 1: Milvus ingestion additions below ---
 # load_and_chunk above is untouched — this reuses its output, it doesn't
@@ -99,10 +172,3 @@ def ingest_file_to_milvus(
     )
 
     return chunks
-
-# if __name__ == "__main__":
-#     import sys
-#     if len(sys.argv) < 2:
-#         print("Usage: python -m src.ingest <filepath>")
-#         sys.exit(1)
-#     ingest_file_to_milvus(sys.argv[1])

@@ -1,11 +1,17 @@
 import os
+import shutil
 import tempfile
 
 from src.config.logging import get_logger
 from src.queue.redis_queue import dequeue_ingestion_job
-from src.storage.storage import download_file
+from src.storage.storage import (
+    download_file,
+    upload_processed_markdown,
+)
 from src.storage.milvus_data_layer import finish_document
-from src.ingestion.ingest import load_and_chunk, embed_and_ingest
+from src.ingestion.ingest import chunk_documents, embed_and_ingest
+from src.preprocessing.mineru_processor import mineru_to_documents
+from src.preprocessing.document_processor import process_document
 from src.graph.graph_builder import build_graph_from_chunks
 from src.graph.community import (
     load_graph_from_neo4j,
@@ -24,6 +30,7 @@ def process_ingestion_job(job: dict):
     uploaded_by = job["uploaded_by"]
     uploaded_at = job["uploaded_at"]
 
+    temp_dir = None
     temp_path = None
 
     logger.info(
@@ -48,11 +55,116 @@ def process_ingestion_job(job: dict):
             local_path=temp_path,
         )
 
+        # # ---------------------------------------------
+        # # 2.1. MinerU preprocessing
+        # # ---------------------------------------------
+
+        # docs, processed_markdown = mineru_to_documents(
+        #     temp_path
+        # )
+
+        # # ---------------------------------------------
+        # # 2.2. Store processed Markdown in MinIO
+        # # ---------------------------------------------
+
+        # processed_md_path = os.path.join(
+        #     temp_dir,
+        #     f"{os.path.splitext(filename)[0]}.md",
+        # )
+
+        # with open(
+        #     processed_md_path,
+        #     "w",
+        #     encoding="utf-8",
+        # ) as f:
+        #     f.write(processed_markdown)
+
+        # processed_key = upload_processed_markdown(
+        #     local_path=processed_md_path,
+        #     document_id=document_id,
+        #     filename=filename,
+        # )
+
+        # logger.info(
+        #     f"[worker] uploaded processed Markdown: "
+        #     f"{processed_key}"
+        # )
+
+        # # ---------------------------------------------
+        # # 2.3. Chunk MinerU documents
+        # # ---------------------------------------------
+
+        # chunks = chunk_documents(docs)
+
+        # logger.info(
+        #     f"[worker] {filename}: "
+        #     f"{len(docs)} pages -> "
+        #     f"{len(chunks)} chunks"
+        # )
+
+
         # ---------------------------------------------
-        # 2. Load + chunk
+        # 2.1. Preprocessing
         # ---------------------------------------------
 
-        chunks = load_and_chunk(temp_path)
+        processed = process_document(temp_path)
+
+        if processed["type"] == "mineru":
+            docs, processed_markdown = mineru_to_documents(
+                processed["path"]
+            )
+
+        else:
+            docs = processed["documents"]
+
+            # Directly extracted formats do not currently
+            # have MinerU Markdown output.
+            processed_markdown = "\n\n".join(
+                doc.page_content.strip()
+                for doc in docs
+                if doc.page_content.strip()
+            )
+
+        # ---------------------------------------------
+        # 2.2. Store processed Markdown in MinIO
+        # ---------------------------------------------
+
+        processed_md_path = os.path.join(
+            temp_dir,
+            f"{os.path.splitext(filename)[0]}.md",
+        )
+
+        with open(
+            processed_md_path,
+            "w",
+            encoding="utf-8",
+        ) as f:
+            f.write(processed_markdown)
+
+        processed_key = upload_processed_markdown(
+            local_path=processed_md_path,
+            document_id=document_id,
+            filename=filename,
+        )
+
+        logger.info(
+            f"[worker] uploaded processed Markdown: "
+            f"{processed_key}"
+        )
+
+        # ---------------------------------------------
+        # 2.3. Chunk extracted documents
+        # ---------------------------------------------
+
+        chunks = chunk_documents(docs)
+
+        logger.info(
+            f"[worker] {filename}: "
+            f"{len(docs)} documents -> "
+            f"{len(chunks)} chunks"
+        )
+
+
 
         # ---------------------------------------------
         # 3. Build graph
@@ -64,9 +176,9 @@ def process_ingestion_job(job: dict):
         )
 
         if failed:
-            raise RuntimeError(
-                "Graph extraction failed for "
-                f"{len(failed)} chunk(s)."
+            logger.warning(
+                f"[worker] graph extraction skipped/failed for "
+                f"{len(failed)} chunk(s), continuing with Milvus ingestion"
             )
 
         # ---------------------------------------------
@@ -127,21 +239,22 @@ def process_ingestion_job(job: dict):
         )
 
     finally:
-        # ---------------------------------------------
-        # 7. Delete temporary processing copy
-        # ---------------------------------------------
+    # ---------------------------------------------
+    # 7. Delete temporary processing directory
+    # ---------------------------------------------
 
-        if temp_path and os.path.exists(temp_path):
+        if temp_dir and os.path.exists(temp_dir):
             try:
-                os.remove(temp_path)
+                shutil.rmtree(temp_dir)
 
                 logger.info(
-                    f"[worker] deleted temporary file: {temp_path}"
+                    f"[worker] deleted temporary directory: {temp_dir}"
                 )
 
             except OSError:
                 logger.exception(
-                    f"[worker] failed to delete: {temp_path}"
+                    f"[worker] failed to delete temporary directory: "
+                    f"{temp_dir}"
                 )
 
 

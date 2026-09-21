@@ -1,5 +1,5 @@
 import boto3
-
+from pathlib import Path
 from src.config.settings import settings
 
 s3_client = boto3.client(
@@ -26,6 +26,29 @@ def upload_file(local_path: str, document_id: str, filename: str) -> str:
 
     return object_key
 
+def upload_processed_markdown(
+    local_path: str,
+    document_id: str,
+    filename: str,
+) -> str:
+    """
+    Upload MinerU processed Markdown to MinIO.
+    Returns the processed object key.
+    """
+
+    markdown_filename = f"{Path(filename).stem}.md"
+
+    object_key = (
+        f"{document_id}/processed/{markdown_filename}"
+    )
+
+    s3_client.upload_file(
+        local_path,
+        settings.minio_bucket,
+        object_key,
+    )
+
+    return object_key
 
 def download_file(source_key: str, local_path: str):
     """Download the permanent MinIO object to a local worker-side temp path."""

@@ -19,17 +19,16 @@ def upload_documents(files: list[UploadFile]):
             detail="No files provided.",
         )
 
+    allowed_extensions = { ".pdf", ".docx", ".pptx", ".xlsx", }
+
     results = []
-
     os.makedirs("data/raw", exist_ok=True)
-
+    
     for file in files:
 
-        if not file.filename.lower().endswith(".pdf"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Only PDF files are supported: {file.filename}",
-            )
+        extension = os.path.splitext( file.filename )[1].lower() 
+        if extension not in allowed_extensions: 
+            raise HTTPException( status_code=400, detail=( "Supported file types are: " "PDF, DOCX, PPTX, XLSX. " f"Unsupported file: {file.filename}" ), )
 
         doc_id = str(uuid.uuid4())
         uploaded_by = "api-upload"
