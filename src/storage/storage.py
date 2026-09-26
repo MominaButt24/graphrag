@@ -84,13 +84,25 @@ def delete_file(object_key: str):
         Key=object_key,
     )
 
-def get_presigned_url(object_key: str, expires_in: int = 3600) -> str:
-    """Generate a temporary URL for viewing/downloading a MinIO object."""
+def get_presigned_url(
+    object_key: str,
+    expires_in: int = 3600,
+    content_type: str | None = None,
+    content_disposition: str = "inline",
+) -> str:
+    params = {
+        "Bucket": settings.minio_bucket,
+        "Key": object_key,
+    }
+
+    if content_type:
+        params["ResponseContentType"] = content_type
+
+    if content_disposition:
+        params["ResponseContentDisposition"] = content_disposition
+
     return s3_client.generate_presigned_url(
         ClientMethod="get_object",
-        Params={
-            "Bucket": settings.minio_bucket,
-            "Key": object_key,
-        },
+        Params=params,
         ExpiresIn=expires_in,
     )
