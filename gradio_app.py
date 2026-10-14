@@ -1,61 +1,92 @@
-# gradio_app.py
+
+import os
+
 import gradio as gr
-import requests
-
-API_BASE = "http://localhost:8000/api/v1"
+import httpx
 
 
-def upload_doc(file):
+API_URL = os.getenv(
+    "API_URL",
+    "http://127.0.0.1:8002/api/v1/query/agent",
+)
+
+
+def query_graphrag(
+    message: str,
+    history: list,
+    request: gr.Request,
+) -> str:
+    """Send a question to GraphRAG and return a readable answer."""
+
+    if not message or not message.strip():
+        return "Please enter a question."
+
+    # Keep each Gradio session's conversation separate.
+    thread_id = f"gradio-{request.session_hash}"
+
     try:
-        with open(file.name, "rb") as f:
-            response = requests.post(f"{API_BASE}/upload", files={"file": f}, timeout=120)
-    except requests.exceptions.ConnectionError:
-        return "Error: could not reach the API server. Is it running?"
-    except requests.exceptions.Timeout:
-        return "Error: upload timed out — the document may be too large or a backend service is slow to respond."
+        response = httpx.post(
+            API_URL,
+            json={
+                "question": message.strip(),
+                "thread_id": thread_id,
+            },
+            timeout=300.0,
+        )
+        response.raise_for_status()
+        data = response.json()
 
-    if response.status_code != 200:
-        try:
-            detail = response.json().get("detail", f"HTTP {response.status_code}")
-        except ValueError:
-            detail = f"HTTP {response.status_code}"
-        return f"Error: {detail}"
+        # Your API returns the answer inside data["answer"]["answer"].
+        result = data.get("answer", data)
 
-    result = response.json()
-    return f"Processed {result['filename']}: {result['chunks']} chunks, {result['failed_chunks']} failed"
+        if isinstance(result, dict):
+            answer = result.get("answer", "No answer was returned.")
+            retrieval = result.get("retrieval") or {}
+        else:
+            answer = str(result)
+            retrieval = data.get("retrieval") or {}
+
+        # Add source information when available.
+        sources = []
+        if isinstance(retrieval, dict):
+            vector_results = retrieval.get("vector_results", [])
+
+            for item in vector_results[:5]:
+                filename = item.get("filename", "Unknown source")
+                page = item.get("page_number")
+
+                label = f"- {filename}"
+                if page is not None:
+                    label += f" (page {page})"
+
+                if label not in sources:
+                    sources.append(label)
+
+        if sources:
+            answer += "\n\n### Retrieved sources\n" + "\n".join(sources)
+
+        return str(answer)
+
+    except httpx.TimeoutException:
+        return "The GraphRAG request timed out. Please try again."
+
+    except httpx.HTTPStatusError as exc:
+        return (
+            f"GraphRAG API returned HTTP {exc.response.status_code}.\n\n"
+            f"{exc.response.text[:1000]}"
+        )
+
+    except Exception as exc:
+        return f"Could not get an answer: {exc}"
 
 
-def ask(question):
-    try:
-        response = requests.post(f"{API_BASE}/query/agent", json={"question": question}, timeout=60)
-    except requests.exceptions.ConnectionError:
-        return "Error: could not reach the API server. Is it running?"
-    except requests.exceptions.Timeout:
-        return "Error: request timed out — the LLM backend may be slow or unreachable."
-
-    if response.status_code != 200:
-        try:
-            detail = response.json().get("detail", f"HTTP {response.status_code}")
-        except ValueError:
-            detail = f"HTTP {response.status_code}"
-        return f"Error: {detail}"
-
-    return response.json().get("answer", "Error: no answer returned")
-
-
-with gr.Blocks(title="GraphRAG") as demo:
-    gr.Markdown("# GraphRAG")
-
-    with gr.Row():
-        file_input = gr.File(label="Upload Document")
-        upload_status = gr.Textbox(label="Upload Status")
-    file_input.upload(upload_doc, inputs=file_input, outputs=upload_status)
-
-    gr.Markdown("---")
-    question_input = gr.Textbox(label="Ask a question")
-    ask_button = gr.Button("Ask")
-    answer_output = gr.Textbox(label="Answer", lines=5)
-    ask_button.click(ask, inputs=question_input, outputs=answer_output)
-
-if __name__ == "__main__":
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+demo = gr.ChatInterface(
+    fn=query_graphrag,
+    type="messages",
+    title="GraphRAG Assistant",
+    description="Ask questions about your knowledge base.",
+    textbox=gr.Textbox(
+        placeholder="Ask GraphRAG a question...",
+        lines=2,
+    ),
+)

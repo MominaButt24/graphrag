@@ -1,10 +1,11 @@
+
 from contextlib import asynccontextmanager
 
 import sentry_sdk
+import gradio as gr
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from chainlit.utils import mount_chainlit
 
 from src.config.settings import settings
 from src.storage.neo4j_client import close_driver
@@ -12,11 +13,14 @@ from src.storage.milvus_client import close_collection
 from src.config.logging import setup_logging, get_logger
 
 from app.routes import router
+from app.gradio_ui import demo
+
 
 setup_logging()
 logger = get_logger(__name__)
 
-# --- SAFE SENTRY INITIALIZATION ---
+
+# Sentry initialization
 if settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
@@ -26,7 +30,7 @@ if settings.sentry_dsn:
     )
 
 
-# --- MODERN LIFESPAN MANAGEMENT ---
+# Application lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     yield
@@ -34,7 +38,11 @@ async def lifespan(app: FastAPI):
     close_collection()
 
 
-app = FastAPI(title="GraphRAG API", lifespan=lifespan)
+app = FastAPI(
+    title="GraphRAG API",
+    lifespan=lifespan,
+)
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -46,10 +54,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# Existing API endpoints
 app.include_router(router)
 
-mount_chainlit(
-    app=app,
-    target="chainlit_app.py",
-    path="/chat"
+
+# Mount Gradio at /gradio
+app = gr.mount_gradio_app(
+    app,
+    demo,
+    path="/gradio",
 )
