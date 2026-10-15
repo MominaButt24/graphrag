@@ -14,6 +14,12 @@ class Settings:
     environment so every other module imports configuration from here.
     """
 
+    anthropic_api_key: str = os.getenv("ANTHROPIC_API_KEY", "")
+    anthropic_model: str = os.getenv(
+        "ANTHROPIC_MODEL",
+        "claude-haiku-4-5",
+    )
+
     llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
     llm_provider: str = os.getenv("LLM_PROVIDER", "openai")
     llm_api_key: str = os.getenv("LLM_API_KEY", "")

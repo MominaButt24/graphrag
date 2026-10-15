@@ -9,9 +9,9 @@ from src.config.settings import settings
 # Reuse the embedder singleton from milvus_client.py instead of loading a
 # second copy of all-MiniLM-L6-v2 into memory.
 from src.storage.milvus_client import get_embedder
-from src.agent.plan_state import PlanState
-from src.agent.planner import create_plan, replan
-from src.agent.execution_context import ExecutionContext
+# from src.agent.plan_state import PlanState
+# from src.agent.planner import create_plan, replan
+# from src.agent.execution_context import ExecutionContext
 from src.generation.llm import get_llm
 from src.queue.plan_events import publish_plan_event
 llm = get_llm()
@@ -93,160 +93,253 @@ def generate_answer(current_query: str, history: list[dict], retrieved_context: 
     return response.content
 
 
+# from src.agent.agent import run_agent
+# def answer_query(thread_id: str, user_id: str, query: str, run_id: str) -> str:
+#     """Full turn: store user msg, pull history, run through the agent (tool
+#     routing + Tavily fallback + Langfuse tracing), store assistant msg."""
+#     store_turn(thread_id, user_id, "user", query)
+
+#     history = get_relevant_history(thread_id, user_id, query)
+#     # history includes the user turn we just stored — drop it so it's not
+#     # duplicated as both "history" and "question" when we call run_agent
+#     history = [h for h in history if h["content"] != query]
+#     history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
+#     retrieval_query = enhance_query(query)
+# #plan
+#     print("\n[PLANNER] Creating plan...")
+
+#     plan = create_plan(
+#         question=query,
+#         retrieval_query=retrieval_query,
+#         history=history_messages,
+#     )
+
+#     plan_state = PlanState(plan)
+#     publish_plan_event(
+#         run_id,
+#         "plan_created",
+#         plan=plan_state.get_plan(),
+#     )
+
+#     execution_context = ExecutionContext(
+#         user_question=query,
+#         retrieval_query=retrieval_query,
+#     )
+#     print("[PLANNER] Plan created:")
+#     for task in plan_state.get_plan()["tasks"]:
+#         print(
+#             f"  {task['id']}. "
+#             f"{task['description']} "
+#             f"[{task['status']}]"
+#         )
+
+
+#     print("\n[AGENT] Starting execution...")
+
+#     while True:
+#         pending_tasks = plan_state.get_pending_tasks()
+
+#         if not pending_tasks:
+#             break
+
+#         task = pending_tasks[0]
+
+#         task_id = task["id"]
+
+#         plan_state.start_task(task_id)
+#         #publishing the task_started event to the queue so that the frontend can update the UI
+#         publish_plan_event(
+#             run_id,
+#             "task_started",
+#             task_id=task_id,
+#             description=task["description"],
+#         )
+
+#         print(
+#             f"[PLAN] Task {task_id} started: "
+#             f"{task['description']}"
+#         )
+
+#         try:
+#             agent_result = run_agent(
+#                 task["description"],
+#                 history=history_messages,
+#                 execution_context=execution_context.get_context(),
+#                 retrieval_query=retrieval_query,
+#             )
+
+#             execution_context.add_result(
+#                 task_id=task_id,
+#                 task_description=task["description"],
+#                 result=agent_result,
+#             )
+
+#             plan_state.complete_task(task_id)
+#             publish_plan_event(
+#                 run_id,
+#                 "task_completed",
+#                 task_id=task_id,
+#                 description=task["description"],
+#             )
+
+#             print(f"[PLAN] Task {task_id} completed.")
+
+#             updated_plan = replan(
+#                 question=query,
+#                 current_plan=plan_state.get_plan(),
+#                 execution_context=execution_context.get_context(),
+#                 history=history_messages,
+#             )
+#             plan_state.update_plan(updated_plan)
+#             #publish after replaning
+#             publish_plan_event(
+#                 run_id,
+#                 "plan_updated",
+#                 plan=plan_state.get_plan(),
+#             )
+
+#             print("[REPLAN] Plan updated:")
+#             for updated_task in plan_state.get_plan()["tasks"]:
+#                 print(
+#                     f"  {updated_task['id']}. "
+#                     f"{updated_task['description']} "
+#                     f"[{updated_task['status']}]"
+#                 )
+
+#         except Exception as exc:
+#             plan_state.fail_task(task_id)
+
+#             publish_plan_event(
+#                 run_id,
+#                 "task_failed",
+#                 task_id=task_id,
+#                 description=task["description"],
+#                 error=str(exc),
+#             )
+
+#             print(f"[PLAN] Task {task_id} failed.")
+#             raise
+
+#     print("\n[AGENT] Plan execution completed.")
+    
+
+#     answer = agent_result["answer"]
+#     retrieval = agent_result.get("retrieval")
+
+#     from src.config.logging import get_logger
+#     logger = get_logger(__name__)
+#     logger.info(f"[chat_history_client][answer_query] FINAL retrieval being returned to Chainlit: {retrieval is not None}")
+
+#     store_turn(thread_id, user_id, "assistant", answer)
+
+#     #loop complete publish evnt
+#     publish_plan_event(
+#         run_id,
+#         "finished",
+#         plan=plan_state.get_plan(),
+#     )
+#     return {
+#         "answer": answer,
+#         "retrieval": retrieval,
+#         # "plan": plan,
+#         "plan": plan_state.get_plan(),
+#     }
+
 from src.agent.agent import run_agent
 
 
-def answer_query(thread_id: str, user_id: str, query: str, run_id: str) -> str:
-    """Full turn: store user msg, pull history, run through the agent (tool
-    routing + Tavily fallback + Langfuse tracing), store assistant msg."""
-    store_turn(thread_id, user_id, "user", query)
+def answer_query(
+    thread_id: str,
+    user_id: str,
+    query: str,
+    run_id: str,
+) -> dict:
+    """
+    Full chat turn using the Deep Agent.
 
-    history = get_relevant_history(thread_id, user_id, query)
-    # history includes the user turn we just stored — drop it so it's not
-    # duplicated as both "history" and "question" when we call run_agent
-    history = [h for h in history if h["content"] != query]
-    history_messages = [{"role": h["role"], "content": h["content"]} for h in history]
+    Deep Agent owns planning and tool execution.
+    Todo events are streamed to Redis for the UI.
+    """
+
+    # 1. Store user message
+    store_turn(
+        thread_id,
+        user_id,
+        "user",
+        query,
+    )
+
+    # 2. Load conversation history
+    history = get_relevant_history(
+        thread_id,
+        user_id,
+        query,
+    )
+
+    # Don't duplicate the current user message
+    history = [
+        h
+        for h in history
+        if h["content"] != query
+    ]
+
+    history_messages = [
+        {
+            "role": h["role"],
+            "content": h["content"],
+        }
+        for h in history
+    ]
+
+    # 3. Build canonical retrieval query
     retrieval_query = enhance_query(query)
-#plan
-    print("\n[PLANNER] Creating plan...")
 
-    plan = create_plan(
+    print("\n[AGENT] Starting Deep Agent...")
+
+    # 4. Deep Agent owns:
+    #    - planning
+    #    - todo state
+    #    - tool selection
+    #    - execution
+    #    - final answer
+    agent_result = run_agent(
         question=query,
-        retrieval_query=retrieval_query,
         history=history_messages,
-    )
-
-    plan_state = PlanState(plan)
-    publish_plan_event(
-        run_id,
-        "plan_created",
-        plan=plan_state.get_plan(),
-    )
-
-    execution_context = ExecutionContext(
-        user_question=query,
         retrieval_query=retrieval_query,
+        run_id=run_id,
     )
-    print("[PLANNER] Plan created:")
-    for task in plan_state.get_plan()["tasks"]:
-        print(
-            f"  {task['id']}. "
-            f"{task['description']} "
-            f"[{task['status']}]"
-        )
-
-
-    print("\n[AGENT] Starting execution...")
-
-    while True:
-        pending_tasks = plan_state.get_pending_tasks()
-
-        if not pending_tasks:
-            break
-
-        task = pending_tasks[0]
-
-        task_id = task["id"]
-
-        plan_state.start_task(task_id)
-        #publishing the task_started event to the queue so that the frontend can update the UI
-        publish_plan_event(
-            run_id,
-            "task_started",
-            task_id=task_id,
-            description=task["description"],
-        )
-
-        print(
-            f"[PLAN] Task {task_id} started: "
-            f"{task['description']}"
-        )
-
-        try:
-            agent_result = run_agent(
-                task["description"],
-                history=history_messages,
-                execution_context=execution_context.get_context(),
-                retrieval_query=retrieval_query,
-            )
-
-            execution_context.add_result(
-                task_id=task_id,
-                task_description=task["description"],
-                result=agent_result,
-            )
-
-            plan_state.complete_task(task_id)
-            publish_plan_event(
-                run_id,
-                "task_completed",
-                task_id=task_id,
-                description=task["description"],
-            )
-
-            print(f"[PLAN] Task {task_id} completed.")
-
-            updated_plan = replan(
-                question=query,
-                current_plan=plan_state.get_plan(),
-                execution_context=execution_context.get_context(),
-                history=history_messages,
-            )
-            plan_state.update_plan(updated_plan)
-            #publish after replaning
-            publish_plan_event(
-                run_id,
-                "plan_updated",
-                plan=plan_state.get_plan(),
-            )
-
-            print("[REPLAN] Plan updated:")
-            for updated_task in plan_state.get_plan()["tasks"]:
-                print(
-                    f"  {updated_task['id']}. "
-                    f"{updated_task['description']} "
-                    f"[{updated_task['status']}]"
-                )
-
-        except Exception as exc:
-            plan_state.fail_task(task_id)
-
-            publish_plan_event(
-                run_id,
-                "task_failed",
-                task_id=task_id,
-                description=task["description"],
-                error=str(exc),
-            )
-
-            print(f"[PLAN] Task {task_id} failed.")
-            raise
-
-    print("\n[AGENT] Plan execution completed.")
-    
 
     answer = agent_result["answer"]
     retrieval = agent_result.get("retrieval")
+    todos = agent_result.get("todos", [])
 
-    from src.config.logging import get_logger
-    logger = get_logger(__name__)
-    logger.info(f"[chat_history_client][answer_query] FINAL retrieval being returned to Chainlit: {retrieval is not None}")
+    print("\n[AGENT] Deep Agent completed.")
 
-    store_turn(thread_id, user_id, "assistant", answer)
-
-    #loop complete publish evnt
-    publish_plan_event(
-        run_id,
-        "finished",
-        plan=plan_state.get_plan(),
+    # 5. Store assistant response
+    store_turn(
+        thread_id,
+        user_id,
+        "assistant",
+        answer,
     )
+
+    logger = __import__(
+        "src.config.logging",
+        fromlist=["get_logger"],
+    ).get_logger(__name__)
+
+    logger.info(
+        "[chat_history_client][answer_query] "
+        f"FINAL retrieval being returned to Chainlit: "
+        f"{retrieval is not None}"
+    )
+
+    # 6. Return final result
     return {
         "answer": answer,
         "retrieval": retrieval,
-        # "plan": plan,
-        "plan": plan_state.get_plan(),
+        "todos": todos,
     }
-
 
 # ---------- Mock LLM — kept only as an offline fallback for future testing ----------
 

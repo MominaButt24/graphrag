@@ -1,0 +1,10 @@
+proxy_location: EveryNode
+
+http_options:
+  host: 0.0.0.0
+  port: 8002
+
+applications:
+  - name: graphrag
+    route_prefix: /
+    import_path: app.ray_serve:app

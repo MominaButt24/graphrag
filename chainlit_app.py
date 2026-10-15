@@ -7,9 +7,8 @@ import os
 import chainlit as cl
 import chainlit.data as cl_data
 import asyncio
-import json
-import redis.asyncio as aioredis
 
+from src.queue.plan_subscriber import subscribe_plan_events
 from src.voice.stt import transcribe_audio
 from src.voice.tts import synthesize_speech
 
@@ -206,112 +205,111 @@ def format_retrieval_explorer(
 
 
 
-#-------------- plan show streamimg ---------------
-def plan_channel(run_id: str) -> str:
-    return f"graphrag:plan:{run_id}"
+# #-------------- plan show streamimg ---------------
+async def update_plan_message(
+    plan_msg: cl.Message,
+    content: str,
+):
+    print(
+        f"[PLAN UI UPDATE] content={content!r}"
+    )
 
-
-async def update_plan_message(plan_msg: cl.Message, content: str):
-    """Update a Chainlit message using the installed Chainlit API."""
     plan_msg.content = content
     await plan_msg.update()
 
+async def handle_plan_events(
+    run_id: str,
+    plan_msg: cl.Message,
+    ready_event: asyncio.Event,
+):
+    """
+    Consume Deep Agent plan events and update the Chainlit
+    planning message.
+    """
 
-async def subscribe_plan_events(run_id: str, plan_msg: cl.Message):
-    redis_client = aioredis.from_url(
-        os.getenv("REDIS_URL", "redis://localhost:6379/0"),
-        decode_responses=True,
-    )
+    async for event in subscribe_plan_events(
+        run_id,
+        ready_event,
+    ):
+        print(f"[CHAINLIT PLAN EVENT] {event}")
 
-    pubsub = redis_client.pubsub()
+        event_type = event.get("type")
 
-    await pubsub.subscribe(plan_channel(run_id))
+        # -----------------------------------------
+        # TODO / PLAN UPDATE
+        # -----------------------------------------
+        if event_type == "todo_updated":
 
-    try:
-        async for message in pubsub.listen():
+            todos = event.get("todos", [])
 
-            if message["type"] != "message":
-                continue
+            print(
+                f"[PLAN] Updating UI with "
+                f"{len(todos)} todos"
+            )
 
-            event = json.loads(message["data"])
-            event_type = event["type"]
+            content = "### Planning\n\n"
 
-            if event_type == "plan_created":
-                tasks = event["plan"]["tasks"]
-
-                content = "### 📋 Plan\n\n"
-                content += "\n".join(
-                    f"⏳ {task['description']}"
-                    for task in tasks
+            for todo in todos:
+                status = todo.get("status")
+                description = todo.get(
+                    "content",
+                    "",
                 )
 
-                await update_plan_message(plan_msg, content)
+                if not description:
+                    continue
 
-            elif event_type == "task_started":
-                await update_plan_message(
-                    plan_msg,
-                    f"### 📋 Plan\n\n"
-                    f"🔄 **Task {event['task_id']}** — "
-                    f"{event['description']}"
-                )
+                if status == "completed":
+                    icon = "✅"
 
-            elif event_type == "task_completed":
-                await update_plan_message(
-                    plan_msg,
-                    f"### 📋 Plan\n\n"
-                    f"✅ **Task {event['task_id']}** — "
-                    f"{event['description']}"
-                )
+                elif status == "in_progress":
+                    icon = "🔄"
 
-            elif event_type == "plan_updated":
-                tasks = event["plan"]["tasks"]
+                else:
+                    icon = "⏳"
 
-                content = "### 📋 Plan\n\n"
+                content += f"{icon} {description}\n"
 
-                for task in tasks:
-                    if task["status"] == "completed":
-                        icon = "✅"
-                    elif task["status"] == "in_progress":
-                        icon = "🔄"
-                    elif task["status"] == "failed":
-                        icon = "❌"
-                    else:
-                        icon = "⏳"
+            await update_plan_message(
+                plan_msg,
+                content,
+            )
 
-                    content += (
-                        f"{icon} **Task {task['id']}** — "
-                        f"{task['description']}\n"
-                    )
+        # -----------------------------------------
+        # TOOL START
+        # -----------------------------------------
+        elif event_type == "tool_started":
 
-                await update_plan_message(plan_msg, content)
+            print(
+                f"[PLAN] Tool started: "
+                f"{event.get('tool')} "
+                f"({event.get('tool_call_id')})"
+            )
 
-            elif event_type == "task_failed":
-                await update_plan_message(
-                    plan_msg,
-                    f"### 📋 Plan\n\n"
-                    f"❌ **Task {event['task_id']} failed** — "
-                    f"{event['description']}"
-                )
+        # -----------------------------------------
+        # TOOL COMPLETE
+        # -----------------------------------------
+        elif event_type == "tool_completed":
 
-            elif event_type == "finished":
-                tasks = event["plan"]["tasks"]
+            print(
+                f"[PLAN] Tool completed: "
+                f"{event.get('tool')} "
+                f"({event.get('tool_call_id')})"
+            )
 
-                content = "### 📋 Plan\n\n"
+        # -----------------------------------------
+        # FINISHED
+        # -----------------------------------------
+        elif event_type == "finished":
+            print(
+                "[PLAN] Deep Agent finished | "
+                f"todos={event.get('todos', [])}"
+            )
 
-                for task in tasks:
-                    content += (
-                        f"✅ **Task {task['id']}** — "
-                        f"{task['description']}\n"
-                    )
+            plan_msg.content += "\n__PLANNING_FINISHED__"
+            await plan_msg.update()
 
-                await update_plan_message(plan_msg, content)
-
-                break
-
-    finally:
-        await pubsub.unsubscribe(plan_channel(run_id))
-        await pubsub.close()
-        await redis_client.close()
+            break
 
 
 # ============================================================
@@ -553,18 +551,25 @@ async def process_query(query: str):
     run_id = str(uuid.uuid4())
 
     plan_msg = cl.Message(
-        content="### 📋 Plan\n\n⏳ Creating plan..."
+        content="### Planning\n\n"
     )
 
     await plan_msg.send()
 
+    subscriber_ready = asyncio.Event()
+
     subscriber_task = asyncio.create_task(
-        subscribe_plan_events(
+        handle_plan_events(
             run_id,
             plan_msg,
+            subscriber_ready,
         )
     )
 
+    await asyncio.wait_for(
+        subscriber_ready.wait(),
+        timeout=5,
+    )
     try:
         result = await asyncio.to_thread(
             answer_query,

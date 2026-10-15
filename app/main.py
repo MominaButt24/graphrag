@@ -11,6 +11,9 @@ from src.storage.neo4j_client import close_driver
 from src.storage.milvus_client import close_collection
 from src.config.logging import setup_logging, get_logger
 
+import gradio as gr
+from gradio_app import demo
+
 from app.routes import router
 
 setup_logging()
@@ -46,10 +49,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# app.include_router(router)
+
+# mount_chainlit(
+#     app=app,
+#     target="chainlit_app.py",
+#     path="/chat"
+# )
+
 app.include_router(router)
 
-mount_chainlit(
-    app=app,
-    target="chainlit_app.py",
-    path="/chat"
+# Mount Gradio inside FastAPI
+app = gr.mount_gradio_app(
+    app,
+    demo,
+    path="/chat",
 )
