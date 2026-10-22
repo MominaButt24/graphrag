@@ -31,7 +31,7 @@ dist/
 # =========================
 
 # Raw/input data
-data/raw/
+data/dataset-re
 .files
 
 # Generated/output data

@@ -1,0 +1,37 @@
+import os
+from pathlib import Path
+
+from dotenv import dotenv_values
+from ray import serve
+
+ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
+
+
+def load_project_env():
+    values = {
+        key: value
+        for key, value in dotenv_values(ENV_FILE).items()
+        if value is not None
+    }
+    # Preserve environment variables already supplied by the process.
+    for key in values:
+        if key in os.environ:
+            values[key] = os.environ[key]
+    os.environ.update(values)
+
+
+@serve.deployment
+class GraphRAGDeployment:
+    def __init__(self):
+        load_project_env()
+
+        # Import and construct the ASGI app inside the replica.
+        from app.main import create_app
+
+        self.asgi_app = create_app()
+
+    async def __call__(self, scope, receive, send):
+        await self.asgi_app(scope, receive, send)
+
+
+app = GraphRAGDeployment.bind()
