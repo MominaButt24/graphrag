@@ -9,7 +9,7 @@ from langfuse.langchain import CallbackHandler
 from src.retrieval.hybrid import hybrid_answer
 from src.retrieval.relevance import get_retrieval_metadata
 from src.retrieval.vector import kb_relevance_score
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 from src.generation.llm import get_llm
 from src.queue.plan_events import publish_plan_event
 

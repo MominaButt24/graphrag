@@ -4,7 +4,7 @@ import shutil
 
 from fastapi import HTTPException, UploadFile
 
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 from src.storage.milvus_data_layer import start_document, finish_document
 from src.storage.storage import upload_file
 from src.queue.redis_queue import enqueue_ingestion_job

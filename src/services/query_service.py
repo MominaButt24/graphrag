@@ -1,5 +1,5 @@
 from src.agent.agent import run_agent
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 from src.retrieval.graph import smart_query
 from src.retrieval.hybrid import hybrid_answer
 from src.services.errors import map_pipeline_error

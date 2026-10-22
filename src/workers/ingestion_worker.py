@@ -2,7 +2,7 @@ import os
 import shutil
 import tempfile
 
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 from src.queue.redis_queue import dequeue_ingestion_job
 from src.storage.storage import (
     download_file,

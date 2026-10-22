@@ -1,5 +1,5 @@
 from src.storage.milvus_client import get_collection, get_embedder
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 import sentry_sdk
 
 from src.generation.llm import get_llm

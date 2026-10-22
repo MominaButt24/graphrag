@@ -3,7 +3,7 @@ from neo4j.exceptions import ServiceUnavailable as Neo4jUnavailable
 from pymilvus import MilvusException
 from openai import APIConnectionError, APIError
 
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 
 logger = get_logger(__name__)
 

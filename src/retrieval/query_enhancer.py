@@ -1,4 +1,4 @@
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 from src.generation.llm import get_llm
 
 logger = get_logger(__name__)

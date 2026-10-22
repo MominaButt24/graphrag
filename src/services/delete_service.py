@@ -1,4 +1,4 @@
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 from src.services.errors import map_pipeline_error
 from src.storage.milvus_client import delete_document_chunks
 from src.storage.milvus_data_layer import delete_document as delete_metadata_document, list_documents

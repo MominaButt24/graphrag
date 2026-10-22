@@ -1,14 +1,17 @@
+
 from langchain.chat_models import init_chat_model
 
-from src.config.llm_config import (
-    llm_config,
-    fallback_llm_config,
-)
+from src.config.llm_config import llm_config
 
 _llm = None
 
 
 def _create_model(cfg: dict):
+    if not cfg["api_key"]:
+        raise ValueError(
+            "LLM_API_KEY is empty. Check your .env and environment."
+        )
+
     return init_chat_model(
         model=cfg["model"],
         model_provider=cfg["model_provider"],
@@ -21,43 +24,24 @@ def _create_model(cfg: dict):
 
 
 def get_llm():
-    """Return the shared LLM.
-
-    Anthropic Claude Haiku is the primary provider.
-    OpenAI-compatible LLM is used as fallback.
-    """
+    """Return the configured OpenAI-compatible LLM."""
     global _llm
 
     if _llm is None:
-        primary_cfg = llm_config()
+        cfg = llm_config()
 
-        try:
-            print(
-                f"[LLM] Using Anthropic: "
-                f"{primary_cfg['model']}"
-            )
+        print(
+            f"[LLM] Provider: {cfg['model_provider']}, "
+            f"Model: {cfg['model']}, "
+            f"Base URL: {cfg['base_url']}"
+        )
 
-            _llm = _create_model(primary_cfg)
-
-        except Exception as e:
-            print(
-                f"[LLM] Anthropic failed: {e}"
-            )
-            print("[LLM] Falling back to OpenAI-compatible model")
-
-            fallback_cfg = fallback_llm_config()
-
-            _llm = _create_model(fallback_cfg)
-
-            print(
-                f"[LLM] Using fallback: "
-                f"{fallback_cfg['model']}"
-            )
+        _llm = _create_model(cfg)
 
     return _llm
 
 
 def reset_llm():
-    """Helper for tests or process restarts."""
+    """Reset the shared LLM instance."""
     global _llm
     _llm = None

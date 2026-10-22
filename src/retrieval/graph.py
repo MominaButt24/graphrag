@@ -1,5 +1,5 @@
 from src.storage.neo4j_client import get_driver
-from src.config.logging import get_logger
+from src.config.my_logging import get_logger
 import sentry_sdk
 
 from src.generation.llm import get_llm

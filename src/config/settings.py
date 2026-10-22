@@ -1,9 +1,11 @@
 import os
 from dataclasses import dataclass
 from typing import Optional
+from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv()
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+load_dotenv(PROJECT_ROOT / ".env", override=True)
 
 
 @dataclass(frozen=True)
@@ -20,11 +22,11 @@ class Settings:
         "claude-haiku-4-5",
     )
 
-    llm_model: str = os.getenv("LLM_MODEL", "gpt-4o-mini")
+    llm_model: str = os.getenv("LLM_MODEL", "qwen-3-vl-4b")
     llm_provider: str = os.getenv("LLM_PROVIDER", "openai")
-    llm_api_key: str = os.getenv("LLM_API_KEY", "")
-    llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL")
-    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "512"))
+    llm_api_key: str = os.getenv("LLM_API_KEY", "my-api-key")
+    llm_base_url: Optional[str] = os.getenv("LLM_BASE_URL", "https://carried-overrun-onto.ngrok-free.dev/v1")
+    llm_max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "2048"))
 
     llm_timeout: int = int(os.getenv("LLM_TIMEOUT", "60"))
     llm_max_retries: int = int(os.getenv("LLM_MAX_RETRIES", "1"))

@@ -1,25 +1,21 @@
 from contextlib import asynccontextmanager
 
 import sentry_sdk
-from sentry_sdk.integrations.fastapi import FastApiIntegration
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from chainlit.utils import mount_chainlit
+from sentry_sdk.integrations.fastapi import FastApiIntegration
 
 from src.config.settings import settings
 from src.storage.neo4j_client import close_driver
 from src.storage.milvus_client import close_collection
-from src.config.logging import setup_logging, get_logger
-
-import gradio as gr
-from gradio_app import demo
+from src.config.my_logging import setup_logging, get_logger
 
 from app.routes import router
+
 
 setup_logging()
 logger = get_logger(__name__)
 
-# --- SAFE SENTRY INITIALIZATION ---
 if settings.sentry_dsn:
     sentry_sdk.init(
         dsn=settings.sentry_dsn,
@@ -29,39 +25,41 @@ if settings.sentry_dsn:
     )
 
 
-# --- MODERN LIFESPAN MANAGEMENT ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    yield
-    close_driver()
-    close_collection()
+    try:
+        yield
+    finally:
+        close_driver()
+        close_collection()
 
 
-app = FastAPI(title="GraphRAG API", lifespan=lifespan)
+def create_app() -> FastAPI:
+    api = FastAPI(
+        title="GraphRAG API",
+        lifespan=lifespan,
+    )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:8001",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    api.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://localhost:7860",
+            "http://127.0.0.1:7860",
+            "http://localhost:8001",
+            "http://localhost:8002",
+            "http://127.0.0.1:8002",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# app.include_router(router)
+    # Keep all existing GraphRAG API endpoints.
+    api.include_router(router)
 
-# mount_chainlit(
-#     app=app,
-#     target="chainlit_app.py",
-#     path="/chat"
-# )
+    logger.info("GraphRAG API configured")
+    return api
 
-app.include_router(router)
 
-# Mount Gradio inside FastAPI
-app = gr.mount_gradio_app(
-    app,
-    demo,
-    path="/chat",
-)
+app = create_app()
+
