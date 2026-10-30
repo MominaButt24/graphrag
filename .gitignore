@@ -80,3 +80,6 @@ Thumbs.db
 
 *.swp
 *.swoserve_config.local.yaml
+
+# Local scraped dataset state (do not commit)
+data/dataset-re/scrape_state.json
