@@ -1,3 +1,4 @@
+from multiprocessing.util import get_logger
 import time
 import random
 
@@ -246,8 +247,6 @@ def generate_answer(current_query: str, history: list[dict], retrieved_context: 
 #     }
 
 from src.agent.agent import run_agent
-
-
 def answer_query(
     thread_id: str,
     user_id: str,
@@ -323,10 +322,13 @@ def answer_query(
         answer,
     )
 
-    logger = __import__(
-        "src.config.logging",
-        fromlist=["get_logger"],
-    ).get_logger(__name__)
+    # logger = __import__(
+    #     "src.config.logging",
+    #     fromlist=["get_logger"],
+    # ).get_logger(__name__)
+
+    from src.config.my_logging import get_logger
+    logger = get_logger(__name__)
 
     logger.info(
         "[chat_history_client][answer_query] "

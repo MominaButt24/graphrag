@@ -9,7 +9,7 @@ from src.config.settings import settings
 from src.storage.neo4j_client import close_driver
 from src.storage.milvus_client import close_collection
 from src.config.my_logging import setup_logging, get_logger
-
+from chainlit.utils import mount_chainlit
 from app.routes import router
 
 
@@ -63,3 +63,9 @@ def create_app() -> FastAPI:
 
 app = create_app()
 
+# Mount Chainlit interface inside FastAPI
+mount_chainlit(
+    app=app,
+    target="chainlit_app.py",
+    path="/chat"
+)
